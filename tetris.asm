@@ -4,8 +4,8 @@
 # Bitmap Display Configuration:
 # - Unit width in pixels: 8 (update this as needed) 
 # - Unit height in pixels: 8 (update this as needed)
-# - Display width in pixels: 64 (update this as needed)
-# - Display height in pixels: 128 (update this as needed)
+# - Display width in pixels: 128 (update this as needed)
+# - Display height in pixels: 256 (update this as needed)
 # - Base Address for Display: 0x10008000 ($gp)
 #
 # Which milestones have been reached in this submission?
@@ -49,47 +49,14 @@ ADDR_KBRD: .word 0xffff0000
 WALL_CLR: .word 0xffffffff
 
 # Tetris Pieces
-I:
-    .half 0x0F00   # 0000 1111 0000 0000
-    .half 0x0000
-    .half 0x0000
-    .half 0x0000
-    
-O:
-    .half 0x0600   # 0000 0110 0000 0000
-    .half 0x0600
-    .half 0x0000
-    .half 0x0000
-
-T:
-    .half 0x0400   # 0000 0100 0000 0000
-    .half 0x0E00   # 0000 1110 0000 0000
-    .half 0x0000
-    .half 0x0000
-
-S:
-    .half 0x0600   # 0000 0110 0000 0000
-    .half 0x0C00   # 0000 1100 0000 0000
-    .half 0x0000
-    .half 0x0000
-
-Z:
-    .half 0x0C00   # 0000 1100 0000 0000
-    .half 0x0600   # 0000 0110 0000 0000
-    .half 0x0000
-    .half 0x0000
-
-J:
-    .half 0x0800   # 0000 1000 0000 0000
-    .half 0x0E00   # 0000 1110 0000 0000
-    .half 0x0000
-    .half 0x0000
-
-L:
-    .half 0x0200   # 0000 0010 0000 0000
-    .half 0x0E00   # 0000 1110 0000 0000
-    .half 0x0000
-    .half 0x0000
+all_pieces:
+I: .half 0x0F00, 0x0000, 0x0000, 0x0000
+O: .half 0x0600, 0x0600, 0x0000, 0x0000
+T: .half 0x0400, 0x0E00, 0x0000, 0x0000
+S: .half 0x0600, 0x0C00, 0x0000, 0x0000
+Z: .half 0x0C00, 0x0600, 0x0000, 0x0000
+J: .half 0x0800, 0x0E00, 0x0000, 0x0000
+L: .half 0x0200, 0x0E00, 0x0000, 0x0000
 
 ##############################################################################
 # Mutable Data
@@ -113,40 +80,49 @@ main:
 	li $t2, 0 # y = 0
 	li $t3, 0  # x = 0 
 draw_left_wall:
-	mul $t4, $t2, 8 # skip this number of units to get to next row start
+	mul $t4, $t2, 16 # skip this number of units to get to next row start
 	add $t4, $t4, $t3 # redundant statement for x=0 but is here for clarity
 	sll $t4, $t4, 2   # next word (= 2^2 bytes)
 	add $t5, $t0, $t4 # actual address in display
 	sw $t1, 0($t5) # draw the cell
 	addi $t2, $t2, 1 # y += 1
-	li $t6, 16 # we have 16 rows
+	li $t6, 32 # we have 32 rows
 	blt $t2 $t6, draw_left_wall # loop until wall is finished
 	
 	li $t2, 0 # y = 0
-	li $t3 7 # same as above but now x = 7
+	li $t3 15 # same as above but now x = 7
 draw_right_wall:
-	mul $t4, $t2, 8 # skip this number of units to get to next row start
+	mul $t4, $t2, 16 # skip this number of units to get to next row start
 	add $t4, $t4, $t3 # redundant statement for x=0 but is here for clarity
 	sll $t4, $t4, 2   # next word (= 2^2 bytes)
 	add $t5, $t0, $t4 # actual address in display
 	sw $t1, 0($t5) # draw the cell
 	addi $t2, $t2, 1 # y += 1
-	li $t6, 16 # we have 16 rows
+	li $t6, 32 # we have 32 rows
 	blt $t2 $t6, draw_right_wall # loop until wall is finished
 	
-	li $t2, 15 # y = 15
+	li $t2, 31 # y = 15
 	li $t3, 0 # x = 0
 draw_bottom_wall:
-	mul $t4, $t2, 8 
+	mul $t4, $t2, 16 
 	add  $t4, $t4, $t3     
 	sll  $t4, $t4, 2 
     	add  $t5, $t0, $t4 
     	sw   $t1, 0($t5)
     	addi $t3, $t3, 1
-    	li   $t6, 8 # we only have 8 columns this time
+    	li   $t6, 16 # we only have 16 columns this time
     	blt  $t3, $t6, draw_bottom_wall
     	
-    	b done
+    	# Get a random piece to start with
+    	li $v0, 42 # random integer
+    	li $a1, 700
+    	syscall
+    	remu $t7 $a0 7 # remainder mod 7 determines the piece
+    	
+    	la $t8, all_pieces # get address of array
+    	li $t9, 8
+    	mul  $t6, $t7, $t9   # spaces to skip = index * 8
+    	add  $s0, $t8, $t6   # s0 = address of selected piece
 	
     
 
