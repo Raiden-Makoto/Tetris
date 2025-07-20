@@ -58,6 +58,11 @@ Z: .half 0x0C00, 0x0600, 0x0000, 0x0000
 J: .half 0x0800, 0x0E00, 0x0000, 0x0000
 L: .half 0x0200, 0x0E00, 0x0000, 0x0000
 
+# Colors
+RED:   .word 0x00FF0000
+GREEN: .word 0x0000FF00
+BLUE:  .word 0x000000FF
+
 ##############################################################################
 # Mutable Data
 ##############################################################################
@@ -65,13 +70,13 @@ L: .half 0x0200, 0x0E00, 0x0000, 0x0000
 ##############################################################################
 # Code
 ##############################################################################
-	.text
+		.text
 	.globl main
 
 	# Run the Tetris game.
 main:
 	la $t0, ADDR_DSPL # Connect to display
-	lw $t0, 0($t0)
+	lw $s7, 0($t0)   # Load display base pointer into $s7
 	lw $t1, WALL_CLR
 	# Start by drawing the walls
 	# Our display is 64 wide by 128 height and each unit is 8 by 8
@@ -83,48 +88,97 @@ draw_left_wall:
 	mul $t4, $t2, 16 # skip this number of units to get to next row start
 	add $t4, $t4, $t3 # redundant statement for x=0 but is here for clarity
 	sll $t4, $t4, 2   # next word (= 2^2 bytes)
-	add $t5, $t0, $t4 # actual address in display
+	add $t5, $s7, $t4 # actual address in display (using $s7 now)
 	sw $t1, 0($t5) # draw the cell
 	addi $t2, $t2, 1 # y += 1
 	li $t6, 32 # we have 32 rows
 	blt $t2 $t6, draw_left_wall # loop until wall is finished
 	
 	li $t2, 0 # y = 0
-	li $t3 15 # same as above but now x = 7
+	li $t3, 15 # same as above but now x = 15
 draw_right_wall:
 	mul $t4, $t2, 16 # skip this number of units to get to next row start
 	add $t4, $t4, $t3 # redundant statement for x=0 but is here for clarity
 	sll $t4, $t4, 2   # next word (= 2^2 bytes)
-	add $t5, $t0, $t4 # actual address in display
+	add $t5, $s7, $t4 # actual address in display (using $s7 now)
 	sw $t1, 0($t5) # draw the cell
 	addi $t2, $t2, 1 # y += 1
 	li $t6, 32 # we have 32 rows
 	blt $t2 $t6, draw_right_wall # loop until wall is finished
 	
-	li $t2, 31 # y = 15
+	li $t2, 31 # y = 31
 	li $t3, 0 # x = 0
 draw_bottom_wall:
 	mul $t4, $t2, 16 
 	add  $t4, $t4, $t3     
 	sll  $t4, $t4, 2 
-    	add  $t5, $t0, $t4 
+    	add  $t5, $s7, $t4 
     	sw   $t1, 0($t5)
     	addi $t3, $t3, 1
     	li   $t6, 16 # we only have 16 columns this time
     	blt  $t3, $t6, draw_bottom_wall
     	
     	# Get a random piece to start with
-    	li $v0, 42 # random integer
-    	li $a1, 700
-    	syscall
-    	remu $t7 $a0 7 # remainder mod 7 determines the piece
+    	li   $v0, 42 # random integer
+    	li   $a1, 700
+   	syscall
+    	remu $t1, $a0, 7 # remainder mod 7 determines the piece
+    	la   $t2, all_pieces # get address of array
+    	li   $t3, 8
+   	mul  $t4, $t1, $t3   # spaces to skip = index * 8
+   	add  $s0, $t2, $t4   # s0 = address of selected piece
     	
-    	la $t8, all_pieces # get address of array
-    	li $t9, 8
-    	mul  $t6, $t7, $t9   # spaces to skip = index * 8
-    	add  $s0, $t8, $t6   # s0 = address of selected piece
+    	# Get a random color
+    	li   $v0, 42
+    	li   $a2, 939
+    	syscall
+    	remu $t5, $a0, 3        # remainder mod 3 is color
+    	la   $t6, RED           # get address of color table
+    	sll  $t7, $t5, 2
+    	add  $t6, $t6, $t7
+    	lw   $s1, 0($t6)        # $s1 = color
 	
+    	# Set spawn position: (x,y) = (6,0) centered in top row
+    	li   $a2, 6
+    	li   $a3, 0
     
+    	# Start drawing the piece (its a x4 grid)
+    	li   $t0, 0 # index of the row we drawing in           
+    	
+draw_pc_main:
+    	beq $t0, 4, game_loop # once we finish spawning the game can start
+    	lhu $t1, 0($s0)       
+    	li  $t4, 0 # r = index of the bit in halfword; halfword is 16 bits
+    	
+draw_pc_inner:
+    	beq  $t4, 4, next_row # each piece is 4x4
+    	li   $t7, 1
+    	li   $t5, 15 # we check if bit 15-r is set
+    	sub  $t5, $t5, $t4
+    	sllv $t7, $t7, $t5
+    	and  $t7, $t7, $t1 # test the bit is set
+    	beqz $t7, do_nothing # bit not set so theres nothing to draw
+    	
+    	# Calculate offset in units:
+    	li $t9, 16
+    	# offset = ((y + i) * width + (x + j)) * 4 bytes
+    	add $t3, $a3, $t0    # y + i
+    	mul $t3, $t3, $t9
+    	add $t3, $t3, $a2   # + x
+    	add $t3, $t3, $t4   # + j
+    	sll $t3, $t3, 2     # *4 for halfword offset
+    	add $t6, $s7, $t3
+    	sw  $s1, 0($t6)  # draw pixel in chosen color
+	
+do_nothing:
+    	addi $t4, $t4, 1 # next bit
+    	j draw_pc_inner # keep going
+
+next_row:
+    	addi $s0, $s0, 2 # get the next row in piece data
+    	addi $t0, $t0, 1 # go to next row
+    	j draw_pc_main # start drawing again
+
 
 game_loop:
 	# 1a. Check if key has been pressed
