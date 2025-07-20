@@ -66,8 +66,7 @@ main:
 	# Start by drawing the walls
 	# Our display is 64 wide by 128 height and each unit is 8 by 8
 	# There are 8 columns and 16 rows
-	# Left wall starts at (x,y) = (0,0) and ends at (0,15)
-	# ----- LEFT WALL: 8 units thicc
+	
 	li $t2, 0 # y = 0
 	li $t3, 0  # x = 0 
 draw_left_wall:
