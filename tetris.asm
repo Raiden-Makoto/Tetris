@@ -62,7 +62,11 @@ L: .half 0x0002, 0x000E, 0x0000, 0x0000   # L piece
 # Colors
 RED:   .word 0x00FF0000
 GREEN: .word 0x0000FF00
-BLUE:  .word 0x000000FF
+DARK_BLUE:  .word 0x000000FF
+LITE_BLUE: .word 0x00ADD8E6
+PURPLE: .word 0x00800080
+ORANGE: .word 0x00FFA500
+YELLOW: .word 0x00FFFF00
 
 ##############################################################################
 # Mutable Data
@@ -137,9 +141,9 @@ draw_bottom_wall:
     	
     	# Get a random color
     	li   $v0, 42
-    	li   $a1, 939
+    	li   $a1, 777
     	syscall
-    	remu $t5, $a0, 3  # remainder mod 3 is color
+    	remu $t5, $a0, 7  # remainder mod 3 is color
     	la   $t6, RED     # get address of color table
     	sll  $t7, $t5, 2
     	add  $t6, $t6, $t7
