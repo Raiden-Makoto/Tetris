@@ -50,13 +50,14 @@ WALL_CLR: .word 0xffffffff
 
 # Tetris Pieces
 all_pieces:
-I: .half 0x0F00, 0x0000, 0x0000, 0x0000
-O: .half 0x0600, 0x0600, 0x0000, 0x0000
-T: .half 0x0400, 0x0E00, 0x0000, 0x0000
-S: .half 0x0600, 0x0C00, 0x0000, 0x0000
-Z: .half 0x0C00, 0x0600, 0x0000, 0x0000
-J: .half 0x0800, 0x0E00, 0x0000, 0x0000
-L: .half 0x0200, 0x0E00, 0x0000, 0x0000
+I: .half 0x000F, 0x0000, 0x0000, 0x0000   # I piece: bottom 4 bits set in first row
+O: .half 0x0006, 0x0006, 0x0000, 0x0000   # O piece: bits 1 and 2 set in first two rows
+T: .half 0x0004, 0x000E, 0x0000, 0x0000   # T piece
+S: .half 0x0006, 0x000C, 0x0000, 0x0000   # S piece
+Z: .half 0x000C, 0x0006, 0x0000, 0x0000   # Z piece
+J: .half 0x0008, 0x000E, 0x0000, 0x0000   # J piece
+L: .half 0x0002, 0x000E, 0x0000, 0x0000   # L piece
+# I hate litle endian
 
 # Colors
 RED:   .word 0x00FF0000
@@ -127,57 +128,71 @@ draw_bottom_wall:
     	li   $t3, 8
    	mul  $t4, $t1, $t3   # spaces to skip = index * 8
    	add  $s0, $t2, $t4   # s0 = address of selected piece
+   	
+   	#li   $t1, 0           # index 0 for I piece
+    	#la   $t2, all_pieces  # base address of pieces
+    	#li   $t3, 8           # size of each piece block in bytes (4 halfwords * 2 bytes)
+    	#mul  $t4, $t1, $t3    # offset = index * size
+    	#add  $s0, $t2, $t4    # $s0 = address of I piece
     	
     	# Get a random color
     	li   $v0, 42
-    	li   $a2, 939
+    	li   $a1, 939
     	syscall
-    	remu $t5, $a0, 3        # remainder mod 3 is color
-    	la   $t6, RED           # get address of color table
+    	remu $t5, $a0, 3  # remainder mod 3 is color
+    	la   $t6, RED     # get address of color table
     	sll  $t7, $t5, 2
     	add  $t6, $t6, $t7
-    	lw   $s1, 0($t6)        # $s1 = color
+    	lw   $s1, 0($t6)   # $s1 = color
 	
-    	# Set spawn position: (x,y) = (6,0) centered in top row
+    	# Spawn @(x,y) = (6,0) centered in top row
     	li   $a2, 6
-    	li   $a3, 0
+    	li   $a3, 2
     
-    	# Start drawing the piece (its a x4 grid)
-    	li   $t0, 0 # index of the row we drawing in           
-    	
+    	# Start drawing the piece (4x4 grid)
+	li $t0, 0                  # row index (0 to 3)
+
 draw_pc_main:
-    	beq $t0, 4, game_loop # once we finish spawning the game can start
-    	lhu $t1, 0($s0)       
-    	li  $t4, 0 # r = index of the bit in halfword; halfword is 16 bits
-    	
+    beq $t0, 4, game_loop  # done with all rows
+
+    lhu $t1, 0($s0)        # load halfword for current row (piece data)
+    li  $t4, 0             # column index (0 to 3)
+
 draw_pc_inner:
-    	beq  $t4, 4, next_row # each piece is 4x4
-    	li   $t7, 1
-    	li   $t5, 15 # we check if bit 15-r is set
-    	sub  $t5, $t5, $t4
-    	sllv $t7, $t7, $t5
-    	and  $t7, $t7, $t1 # test the bit is set
-    	beqz $t7, do_nothing # bit not set so theres nothing to draw
-    	
-    	# Calculate offset in units:
-    	li $t9, 16
-    	# offset = ((y + i) * width + (x + j)) * 4 bytes
-    	add $t3, $a3, $t0    # y + i
-    	mul $t3, $t3, $t9
-    	add $t3, $t3, $a2   # + x
-    	add $t3, $t3, $t4   # + j
-    	sll $t3, $t3, 2     # *4 for halfword offset
-    	add $t6, $s7, $t3
-    	sw  $s1, 0($t6)  # draw pixel in chosen color
-	
+    beq $t4, 4, next_row
+
+    # Compute bitmask: bit = 1 << (3 - col)
+    li   $t5, 3
+    sub  $t5, $t5, $t4
+    li   $t6, 1
+    sllv $t6, $t6, $t5
+
+    # Check if bit is set
+    and  $t7, $t1, $t6
+    beqz $t7, do_nothing
+
+    # Calculate x = spawn_x + col
+    add  $t8, $a2, $t4      # t8 = x
+
+    # Calculate y = spawn_y + row
+    add  $t9, $a3, $t0      # t9 = y
+
+    # Compute address: (y * 16 + x) * 4 + screen_base
+    mul  $t3, $t9, 16       # y * 16
+    add  $t3, $t3, $t8      # + x
+    sll  $t3, $t3, 2        # *4 bytes per pixel
+    add  $t6, $s7, $t3      # screen base + offset
+    sw   $s1, 0($t6)        # draw color
+
 do_nothing:
-    	addi $t4, $t4, 1 # next bit
-    	j draw_pc_inner # keep going
+    addi $t4, $t4, 1        # next column
+    j draw_pc_inner
 
 next_row:
-    	addi $s0, $s0, 2 # get the next row in piece data
-    	addi $t0, $t0, 1 # go to next row
-    	j draw_pc_main # start drawing again
+    addi $s0, $s0, 2        # next halfword (row)
+    addi $t0, $t0, 1        # next row
+    j draw_pc_main
+
 
 
 game_loop:
@@ -187,9 +202,11 @@ game_loop:
 	# 2b. Update locations (paddle, ball)
 	# 3. Draw the screen
 	# 4. Sleep
+	
+	b done
 
     #5. Go back to 1
-    b game_loop
+    #b game_loop
     
 done: # debugging only
 	li $v0, 10
