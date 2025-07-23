@@ -50,6 +50,9 @@ ADDR_KBRD: .word 0xffff0000
 # Color white for the walls
 WALL_CLR: .word 0xffffffff
 NO_PIECE: .word 0x00000000 # empty color/black
+# Checkerboard Colors
+DARK_GRAY:   .word 0xFF555555
+LIGHT_GRAY:  .word 0xFFAAAAAA
 
 # Tetris Pieces
 all_pieces:
@@ -81,13 +84,69 @@ YELLOW: .word 0x00FFFF00
 ##############################################################################
 # Code
 ##############################################################################
-		.text
-	.globl main
+.text
+.globl main
 
 	# Run the Tetris game.
 main:
 	la $t0, ADDR_DSPL # Connect to display
 	lw $s7, 0($t0)   # Load display base pointer into $s7
+	
+draw_checkerboard:
+	li $t0 0
+	
+outer_row:
+	li $t1 0
+	
+inner_col:
+	add $t2, $t1, $t0
+	andi $t2, $t2, 1
+	beqz $t2, dark_square
+	la $t3, LIGHT_GRAY
+	j draw_unit
+	
+dark_square:
+	la $t3, DARK_GRAY
+	
+draw_unit:
+	lw $t4, 0($t3)
+	li $t5, 0              # dy: pixel row inside unit
+	
+draw_block_row:
+	li $t6, 0              # dx: pixel col inside unit
+	
+draw_block_col:
+    # Compute absolute pixel x,y
+    mul $t7, $t0, 8        # y = row * 8
+    add $t7, $t7, $t5
+    mul $t8, $t7, 128      # y * width (128)
+    
+    mul $t9, $t1, 8        # x = col * 8
+    add $t9, $t9, $t6
+    add $t8, $t8, $t9      # (y * width) + x
+    sll $t8, $t8, 2        # *4 for byte address
+
+    add $t8, $s7, $t8
+    sw $t4, 0($t8)
+
+    addi $t6, $t6, 1
+    li $t2, 8
+    blt $t6, $t2, draw_block_col
+
+    addi $t5, $t5, 1
+    li $t2, 8
+    blt $t5, $t2, draw_block_row
+
+    addi $t1, $t1, 1
+    li $t2, 16
+    blt $t1, $t2, inner_col
+
+    addi $t0, $t0, 1
+    li $t2, 16
+    blt $t0, $t2, outer_row
+    
+    	# Now draw the walls 
+	
 	lw $t1, WALL_CLR
 	# Start by drawing the walls
 	# Our display is 64 wide by 128 height and each unit is 8 by 8
@@ -151,7 +210,7 @@ draw_bottom_wall:
 	
     	# Spawn @(x,y) = (6,0) centered in top row
     	li   $a2, 6
-    	li   $a3, 2
+    	li   $a3, 0
     
     	# Start drawing the piece (4x4 grid)
 	jal draw_pc_main
@@ -226,8 +285,12 @@ crash_out:
 	lw $a0, 4($s6)
 	beq $a0, 0x61, a_was_pressed
 	beq $a0, 0x64, d_was_pressed
+	# w key rotates clockwise 90
+	# s key rotates clockwise -90
 	beq $a0, 0x71, done # quit the game
+	# gravity to move the piece down automatically
 	# other keyboard commands ...
+	j game_loop
 
 a_was_pressed:
 	# code logic here
@@ -240,52 +303,81 @@ a_was_pressed:
 	
 d_was_pressed:
 	# code logic here
-	b game_loop
-    
+	jal erase_piece
+	add $a2, $a2, 1
+	jal check_hitting_wall
+	# if check_hitting_wall returns 1, sub back 1 from x
+	jal draw_pc_main # redraw the piece
+   
+# This function erases a piece and
+# reverts back the checkerboard pattern that was originally there
 erase_piece:
-	# s0 contains the index in all_pieces of the piece to erase
-	# a2 contains the x coord
-	# a3 contains the y coord
-	la $t0, NO_PIECE
-	lw $t1, 0($t0) # load black color
-	move $t2, $s0 # piece pointer
-	li $t3, 0
-	
+	# $s0 = pointer to piece
+	# $a2 = x, $a3 = y
+
+	li $t3, 0            # row index
+	move $t2, $s0        # piece pointer
+
 erase_row:
-	beq $t3, 4, brd_clr # the board is clear
-	lhu $t4 0($t2) # load the row
-	li $t5, 0
-	
+	beq $t3, 4, brd_clr
+	lhu $t4, 0($t2)      # current row halfwrod
+	li $t5, 0            # column index
+
 erase_col:
 	beq $t5, 4, next_row_erase
+
+	# Check if bit (3 - col) is set
 	li $t6, 3
-	sub $t6, $t6, $t5 # computing the index
+	sub $t6, $t6, $t5
 	li $t7, 1
-	sllv $t7, $t7, $t6 # compute 1 << (3 - column index)
-	and $t8, $t4, $t7 # check if bit is set
+	sllv $t7, $t7, $t6
+	and $t8, $t4, $t7
 	beqz $t8, nothing_to_erase
-	
-	add $t9, $a2, $t5
-	add $t6, $a3, $t3
-	
+
+	# Compute (x + col, y + row)
+	add $t9, $a2, $t5    # x = x + col
+	add $t6, $a3, $t3    # y = y + row
+
+	# Checkerboard color based on (x + y) % 2
+	add $t0, $t9, $t6    # x + y
+	andi $t0, $t0, 1     # keep LSB
+	beqz $t0, use_light
+
+	# DARK_GRAY
+	la $t1, DARK_GRAY
+	j draw_pixel
+
+use_light:
+	la $t1, LIGHT_GRAY
+
+draw_pixel:
+	lw $t1, 0($t1)
+
+	# Compute address = (y * 16 + x) * 4 + $s7
 	mul $t7, $t6, 16
 	add $t7, $t7, $t9
 	sll $t7, $t7, 2
-	add $7, $7, $s7
-	sw $t1, 0($t7) # black pixel
-	
+	add $t7, $t7, $s7
+	sw $t1, 0($t7)
+
 nothing_to_erase:
 	addi $t5, $t5, 1
 	j erase_col
-	
+
 next_row_erase:
 	addi $t2, $t2, 2
 	addi $t3, $t3, 1
 	j erase_row
-	
+
 brd_clr:
 	jr $ra
+
 	
+check_hitting_wall:
+	# s0 contains the index of the piece we want to wall test
+	lhu $t1, 0($s0)
+	li $t2, 0
+
 
 nap_time:
 	li $v0, 32
