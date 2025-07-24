@@ -40,6 +40,8 @@
 ##############################################################################
 
 .data
+comma:   .asciiz ", "
+newline: .asciiz "\n"
 ##############################################################################
 # Immutable Data
 ##############################################################################
@@ -49,10 +51,7 @@ ADDR_DSPL: .word 0x10008000
 ADDR_KBRD: .word 0xffff0000
 # Color white for the walls
 WALL_CLR: .word 0xffffffff
-NO_PIECE: .word 0x00000000 # empty color/black
-# Checkerboard Colors
-DARK_GRAY:   .word 0xFF555555
-LIGHT_GRAY:  .word 0xFFAAAAAA
+
 
 # Tetris Pieces
 all_pieces:
@@ -80,6 +79,8 @@ YELLOW: .word 0x00FFFF00
 # S7 is the DISPLAY
 # S6 is the keyboard
 
+# fk it we hardcode the checkerboard
+.data
 
 ##############################################################################
 # Code
@@ -87,175 +88,159 @@ YELLOW: .word 0x00FFFF00
 .text
 .globl main
 
-	# Run the Tetris game.
+		# Run the Tetris game.
 main:
-	la $t0, ADDR_DSPL # Connect to display
-	lw $s7, 0($t0)   # Load display base pointer into $s7
-	
+    la   $t0, ADDR_DSPL      # Load address of ADDR_DSPL
+    lw   $s7, 0($t0)         # Load 0x10008000 into $s7
+    
+    # Draw checkerboard
+    jal  draw_checkerboard
+    
+    # Continue with game
+    jal build_a_wall
+    
+    j game_loop
+    
+    #li $v0, 10
+    #syscall
+
 draw_checkerboard:
-	li $t0 0
-	
-outer_row:
-	li $t1 0
-	
-inner_col:
-	add $t2, $t1, $t0
-	andi $t2, $t2, 1
-	beqz $t2, dark_square
-	la $t3, LIGHT_GRAY
-	j draw_unit
-	
-dark_square:
-	la $t3, DARK_GRAY
-	
-draw_unit:
-	lw $t4, 0($t3)
-	li $t5, 0              # dy: pixel row inside unit
-	
-draw_block_row:
-	li $t6, 0              # dx: pixel col inside unit
-	
-draw_block_col:
-    # Compute absolute pixel x,y
-    mul $t7, $t0, 8        # y = row * 8
-    add $t7, $t7, $t5
-    mul $t8, $t7, 128      # y * width (128)
+    # Using $s7 as base pointer
+    li   $t0, 0              # y counter (0-31)
     
-    mul $t9, $t1, 8        # x = col * 8
-    add $t9, $t9, $t6
-    add $t8, $t8, $t9      # (y * width) + x
-    sll $t8, $t8, 2        # *4 for byte address
-
-    add $t8, $s7, $t8
-    sw $t4, 0($t8)
-
-    addi $t6, $t6, 1
-    li $t2, 8
-    blt $t6, $t2, draw_block_col
-
-    addi $t5, $t5, 1
-    li $t2, 8
-    blt $t5, $t2, draw_block_row
-
+y_loop:
+    li   $t1, 0              # x counter (0-15)
+    
+x_loop:
+    # Calculate checkerboard pattern (x + y) % 2
+    add  $t2, $t1, $t0
+    andi $t2, $t2, 1
+    
+    # Calculate address: $s7 + (y*64 + x*4)
+    sll  $t3, $t0, 6         # y * 64 (16 units/row * 4 bytes/unit)
+    sll  $t4, $t1, 2         # x * 4
+    add  $t5, $t3, $t4       # offset
+    add  $t6, $s7, $t5       # Final address ($s7 + offset)
+    
+    # Set colors
+    beqz $t2, dark_unit
+    li   $t7, 0x00333333     # Light gray
+    j    store_color
+    
+dark_unit:
+    li   $t7, 0x00222222     # Dark gray
+    
+store_color:
+    sw   $t7, 0($t6)         # Store color to display memory
+    
+    # Increment x
     addi $t1, $t1, 1
-    li $t2, 16
-    blt $t1, $t2, inner_col
-
+    blt  $t1, 16, x_loop     # 16 units across (128/8)
+    
+    # Increment y
     addi $t0, $t0, 1
-    li $t2, 16
-    blt $t0, $t2, outer_row
+    blt  $t0, 32, y_loop     # 32 units down (256/8)
     
-    	# Now draw the walls 
-	
-	lw $t1, WALL_CLR
-	# Start by drawing the walls
-	# Our display is 64 wide by 128 height and each unit is 8 by 8
-	# There are 8 columns and 16 rows
-	
-	li $t2, 0 # y = 0
-	li $t3, 0  # x = 0 
-draw_left_wall:
-	mul $t4, $t2, 16 # skip this number of units to get to next row start
-	add $t4, $t4, $t3 # redundant statement for x=0 but is here for clarity
-	sll $t4, $t4, 2   # next word (= 2^2 bytes)
-	add $t5, $s7, $t4 # actual address in display (using $s7 now)
-	sw $t1, 0($t5) # draw the cell
-	addi $t2, $t2, 1 # y += 1
-	li $t6, 32 # we have 32 rows
-	blt $t2 $t6, draw_left_wall # loop until wall is finished
-	
-	li $t2, 0 # y = 0
-	li $t3, 15 # same as above but now x = 15
-draw_right_wall:
-	mul $t4, $t2, 16 # skip this number of units to get to next row start
-	add $t4, $t4, $t3 # redundant statement for x=0 but is here for clarity
-	sll $t4, $t4, 2   # next word (= 2^2 bytes)
-	add $t5, $s7, $t4 # actual address in display (using $s7 now)
-	sw $t1, 0($t5) # draw the cell
-	addi $t2, $t2, 1 # y += 1
-	li $t6, 32 # we have 32 rows
-	blt $t2 $t6, draw_right_wall # loop until wall is finished
-	
-	li $t2, 31 # y = 31
-	li $t3, 0 # x = 0
-draw_bottom_wall:
-	mul $t4, $t2, 16 
-	add  $t4, $t4, $t3     
-	sll  $t4, $t4, 2 
-    	add  $t5, $s7, $t4 
-    	sw   $t1, 0($t5)
-    	addi $t3, $t3, 1
-    	li   $t6, 16 # we only have 16 columns this time
-    	blt  $t3, $t6, draw_bottom_wall
-    	
-    	# Get a random piece to start with
-    	li   $v0, 42 # random integer
-    	li   $a1, 700
-   	syscall
-    	remu $t1, $a0, 7 # remainder mod 7 determines the piece
-    	la   $t2, all_pieces # get address of array
-    	li   $t3, 8
-   	mul  $t4, $t1, $t3   # skip index * 8 spaces
-   	add  $s0, $t2, $t4   # s0 = addr of selected piece
-   
-    	# Get a random color
-    	li   $v0, 42
-    	li   $a1, 777
-    	syscall
-    	remu $t5, $a0, 7  # remainder mod 7 is color
-    	la   $t6, RED     # get address of color table
-    	sll  $t7, $t5, 2
-    	add  $t6, $t6, $t7
-    	lw   $s1, 0($t6)   # $s1 = color
-	
-    	# Spawn @(x,y) = (6,0) centered in top row
-    	li   $a2, 6
-    	li   $a3, 0
-    
-    	# Start drawing the piece (4x4 grid)
-	jal draw_pc_main
-	b game_loop # done setupm start the game
+    jr   $ra                 # Return to caller
 
-# draw_pc_main
-# This function draws the piece located at ($a2, $a3) using the shape pointed to by $s0
-# and color $s1. The shape is a 4x4 grid of 4 halfwords.
+build_a_wall:
+    lw   $t1, WALL_CLR
+
+    li   $t2, 0 # y = 0
+    li   $t3, 0  # x = 0 
+draw_left_wall:
+    mul  $t4, $t2, 16
+    add  $t4, $t4, $t3
+    sll  $t4, $t4, 2
+    add  $t5, $s7, $t4
+    sw   $t1, 0($t5)
+    addi $t2, $t2, 1
+    li   $t6, 32
+    blt  $t2, $t6, draw_left_wall
+
+    li   $t2, 0
+    li   $t3, 15
+draw_right_wall:
+    mul  $t4, $t2, 16
+    add  $t4, $t4, $t3
+    sll  $t4, $t4, 2
+    add  $t5, $s7, $t4
+    sw   $t1, 0($t5)
+    addi $t2, $t2, 1
+    li   $t6, 32
+    blt  $t2, $t6, draw_right_wall
+
+    li   $t2, 31
+    li   $t3, 0
+draw_bottom_wall:
+    mul  $t4, $t2, 16
+    add  $t4, $t4, $t3
+    sll  $t4, $t4, 2
+    add  $t5, $s7, $t4
+    sw   $t1, 0($t5)
+    addi $t3, $t3, 1
+    li   $t6, 16
+    blt  $t3, $t6, draw_bottom_wall
+
+    li   $v0, 42
+    li   $a1, 700
+    syscall
+    remu $t1, $a0, 7
+    la   $t2, all_pieces
+    li   $t3, 8
+    mul  $t4, $t1, $t3
+    add  $s0, $t2, $t4
+
+    li   $v0, 42
+    li   $a1, 777
+    syscall
+    remu $t5, $a0, 7
+    la   $t6, RED
+    sll  $t7, $t5, 2
+    add  $t6, $t6, $t7
+    lw   $s1, 0($t6)
+
+    li   $a2, 6
+    li   $a3, 0
+
+    jal  draw_pc_main
+    jr   $ra
+
 draw_pc_main:
-    move $t2, $s0      # temp pointer to shape data
-    li   $t0, 0        # row index (0 to 3)
+    move $t2, $s0
+    li   $t0, 0
 
 draw_pc_row:
-    beq $t0, 4, done_drawing  # done with all rows
-    lhu $t1, 0($t2)           # current row halfword
-    li  $t4, 0                # column index (0 to 3)
+    beq $t0, 4, done_drawing
+    lhu  $t1, 0($t2)
+    li   $t4, 0
 
 draw_pc_inner:
     beq $t4, 4, next_row
 
-    # Compute bitmask: 1 << (3 - col)
     li   $t5, 3
     sub  $t5, $t5, $t4
     li   $t6, 1
     sllv $t6, $t6, $t5
-    and  $t7, $t1, $t6        # Check if bit is set
-    beqz $t7, do_nothing      # if not set, skip drawing
+    and  $t7, $t1, $t6
+    beqz $t7, do_nothing
 
-    add  $t8, $a2, $t4        # t8 = x
-    add  $t9, $a3, $t0        # t9 = y
+    add  $t8, $a2, $t4
+    add  $t9, $a3, $t0
 
-    # Address: (y * 16 + x) * 4 + screen_base
-    mul  $t3, $t9, 16         # y * 16
-    add  $t3, $t3, $t8        # + x
-    sll  $t3, $t3, 2          # *4 bytes per pixel
-    add  $t6, $s7, $t3        # screen base + offset
-    sw   $s1, 0($t6)          # draw color
+    mul  $t3, $t9, 16
+    add  $t3, $t3, $t8
+    sll  $t3, $t3, 2
+    add  $t6, $s7, $t3
+    sw   $s1, 0($t6)
 
 do_nothing:
-    addi $t4, $t4, 1          # next column
+    addi $t4, $t4, 1
     j draw_pc_inner
 
 next_row:
-    addi $t2, $t2, 2          # next halfword (row)
-    addi $t0, $t0, 1          # next row
+    addi $t2, $t2, 2
+    addi $t0, $t0, 1
     j draw_pc_row
 
 done_drawing:
@@ -267,6 +252,8 @@ game_loop:
     	# 2a. Check for collisions
 	# 2b. Update locations (paddle, ball)
 	# 3. Draw the screen
+	
+	b done
 
 	li $a0 2
 	jal nap_time # zzzzzz
@@ -277,9 +264,6 @@ game_loop:
 	lw $t9, 0($s6)   # load first wrod from keybrd
 	beq $t9, 1, crash_out
 	# b game_loop
-
-    #5. Go back to 1
-    #b game_loop
     
 crash_out:
 	lw $a0, 4($s6)
@@ -341,16 +325,16 @@ erase_col:
 	# Checkerboard color based on (x + y) % 2
 	add $t0, $t9, $t6    # x + y
 	andi $t0, $t0, 1     # keep LSB
-	beqz $t0, use_light
+	beqz $t0, light_pattern
 
 	# DARK_GRAY
-	la $t1, DARK_GRAY
-	j draw_pixel
+	la $t1, 0x0
+	j draw_pixel_2
 
-use_light:
-	la $t1, LIGHT_GRAY
+light_pattern:
+	la $t1, 0xf
 
-draw_pixel:
+draw_pixel_2:
 	lw $t1, 0($t1)
 
 	# Compute address = (y * 16 + x) * 4 + $s7
