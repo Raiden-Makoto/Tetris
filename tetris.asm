@@ -82,13 +82,19 @@ PURPLE: .word 0x00800080
 ORANGE: .word 0x00FFA500
 YELLOW: .word 0x00FFFF00
 
+# Piece states for rotation
+current_piece: .space 8
+rotated_piece: .space 8
+
 ##############################################################################
 # Mutable Data
 ##############################################################################
 # S7 is the DISPLAY
 # S6 is the keyboard
 # S5 is the gravity counter
+# S2 will store the rotated piece
 # S1 stores the piece color
+# S0 is the pointer to the piece
 ##############################################################################
 # Code
 ##############################################################################
@@ -194,6 +200,7 @@ draw_bottom_wall:
     blt  $t3, $t6, draw_bottom_wall
 	jr $ra #should go here
 	
+# loads a random piece and color and stores the piece in current_piece
 random_bs_go:
     li   $v0, 42
     li   $a1, 700
@@ -202,7 +209,7 @@ random_bs_go:
     la   $t2, all_pieces
     li   $t3, 8
     mul  $t4, $t1, $t3
-    add  $s0, $t2, $t4
+    add  $s0, $t2, $t4         # $s0 = pointer to random piece
 
     li   $v0, 42
     li   $a1, 777
@@ -211,8 +218,22 @@ random_bs_go:
     la   $t6, RED
     sll  $t7, $t5, 2
     add  $t6, $t6, $t7
-    lw   $s1, 0($t6)
+    lw   $s1, 0($t6)           # $s1 = color
 
+    # Copy selected piece into current_piece buffer
+    la   $t0, current_piece
+    li   $t1, 0
+
+copy_piece_loop:
+    beq  $t1, 8, done_copying  # 4 halfwords = 8 bytes
+    lhu  $t2, 0($s0)
+    sh   $t2, 0($t0)
+    addi $s0, $s0, 2
+    addi $t0, $t0, 2
+    addi $t1, $t1, 2
+    j    copy_piece_loop
+
+done_copying:
     li   $a2, 6
     li   $a3, 0
     jr   $ra
