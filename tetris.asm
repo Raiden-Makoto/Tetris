@@ -48,6 +48,7 @@ msg_key_pressed:       .asciiz "A key was pressed\n"
 msg_erasing_piece:   .asciiz "Erasing piece\n"
 msg_drawing_piece:   .asciiz "Drawing new piece\n"
 msg_game_starting:	.asciiz "Game Starting\n"
+msg_do_something: .asciiz "press a fucking key\n"
 
 ##############################################################################
 # Immutable Data
@@ -112,6 +113,7 @@ main:
     syscall
     # load random color and piece and draw it
     jal random_bs_go
+    jal draw_pc_main
     # loop until the player loses
     j game_loop
 
@@ -215,8 +217,6 @@ random_bs_go:
 
     li   $a2, 6
     li   $a3, 0
-
-    jal  draw_pc_main
     jr   $ra
 
 draw_pc_main:
@@ -260,24 +260,28 @@ done_drawing:
     jr $ra
 
 game_loop:
-    lw $t9, 0($s6)           # load keyboard status
-    beq $t9, 1, crash_out    # someone pressed a key oh no
+	li $s5, 0 #initialize counter
+    
     
 # hurry up and press a key bruh
 no_key_pressed:
+	lw $t9, 0($s6)           # poll keyboard every 10ms
+    beq $t9, 1, crash_out    # someone pressed a key
     # Wait 10 ms
-    li $a0, 10
+    li $a0, 100
     jal nap_time
-    addiu $s5, $s5, 10       # $s5 += 10 ms
+    addiu $s5, $s5, 100       # $s5 += 100 ms
+    
+    li $v0, 4
+    la $a0, msg_do_something
+    syscall
 
     # Check if 1 second has passed
-    blt $s5, 1000, continue_loop
+    blt $s5, 1000, no_key_pressed
 
     # 5. Time to apply gravity
     #jal gravity              # nonexistent gravity function here
     li $s5, 0                # reset timer counter
-    
-continue_loop:
 	j game_loop # are you going to press a key ffs
 
 crash_out:
@@ -293,9 +297,6 @@ crash_out:
 	
 	# Reset keyboard status so next keypress can be detected
     sw $zero, 0($s6)
-    # Optional: small delay after handling key
-    li $a0, 10
-    jal nap_time
     j game_loop
 
 a_was_pressed:
