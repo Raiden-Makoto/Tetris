@@ -44,11 +44,12 @@ comma:   .asciiz ", "
 newline: .asciiz "\n"
 
 # debug for keyboard
-msg_key_pressed:       .asciiz "A key was pressed\n"
+msg_key_pressed:       .asciiz "This key was pressed: "
 msg_erasing_piece:   .asciiz "Erasing piece\n"
 msg_drawing_piece:   .asciiz "Drawing new piece\n"
 msg_game_starting:	.asciiz "Game Starting\n"
-msg_do_something: .asciiz "press a fucking key\n"
+msg_wall_hit: .asciiz "Oh noes we hit trumps wall\n"
+msg_wall_safe: .asciiz "ice has deported the illegals\n"
 
 ##############################################################################
 # Immutable Data
@@ -87,9 +88,6 @@ YELLOW: .word 0x00FFFF00
 # S7 is the DISPLAY
 # S6 is the keyboard
 
-# fk it we hardcode the checkerboard
-.data
-
 ##############################################################################
 # Code
 ##############################################################################
@@ -100,9 +98,8 @@ YELLOW: .word 0x00FFFF00
 main:
     la   $t0, ADDR_DSPL      # Load address of ADDR_DSPL
     lw   $s7, 0($t0)         # Load 0x10008000 into $s7
-    la $s6, ADDR_KBRD        # Load keyboard address once into $s6
-    li $s5, 0                # timer counter in ms (using $s5), we apply gravity every second
-    li $t1, 20               # loop delay in ms (20 ms) while polling for input
+    la $s6, ADDR_KBRD       # Load address of keyboard control
+    lw $s6, 0($s6)          # Get actual memory address
     # Draw checkerboard
     jal  draw_checkerboard  
     # Draw the three wals
@@ -260,49 +257,43 @@ done_drawing:
     jr $ra
 
 game_loop:
-	li $s5, 0 #initialize counter
-    
-    
-# hurry up and press a key bruh
-no_key_pressed:
-	lw $t9, 0($s6)           # poll keyboard every 10ms
-    beq $t9, 1, crash_out    # someone pressed a key
-    # Wait 10 ms
+    lw $t9, 0($s6)          # poll keyboard control
+    andi $t9, $t9, 1        # check ready bit
+    beqz $t9, sleep         # not ready, keep waiting
+    j process_key           # key ready
+
+sleep:
     li $a0, 100
-    jal nap_time
-    addiu $s5, $s5, 100       # $s5 += 100 ms
+    jal nap_time            # sleep for 100ms 
+    addiu $s5, $s5, 100
+    blt $s5, 1000, game_loop  # skip gravity if wait time under 1000ms
+    #jal gravity 	# gravity the piece down
+    li $s5, 0    # reset counter after 1 second
+    j game_loop
+
+process_key:
+    lw $a0, 4($s6)          # load key code
+    beq $a0, 0x61, a_was_pressed   # 'a' pressed
+    beq $a0, 0x64, d_was_pressed   # 'd' pressed
+    beq $a0, 0x73, s_was_pressed   # 's' pressed
+    beq $a0, 0x77, w_was_pressed   # 'w' pressed
+    beq $a0, 0x71, done        # 'q' quit
     
-    li $v0, 4
-    la $a0, msg_do_something
-    syscall
-
-    # Check if 1 second has passed
-    blt $s5, 1000, no_key_pressed
-
-    # 5. Time to apply gravity
-    #jal gravity              # nonexistent gravity function here
-    li $s5, 0                # reset timer counter
-	j game_loop # are you going to press a key ffs
-
-crash_out:
-	li   $v0, 4
-    la   $a0, msg_key_pressed
-    syscall
-    lw $a0, 4($s6)           # load key code
-    beq $a0, 0x61, a_was_pressed   # 'a' move left
-    beq $a0, 0x64, d_was_pressed   # 'd' move right
-    beq $a0, 0x73, s_was_pressed   # 's' rotate ccw
-    beq $a0, 0x77, w_was_pressed   # 'w' rotate cw
-    beq $a0, 0x71, done            # 'q' quit
-	
-	# Reset keyboard status so next keypress can be detected
+    # Reset keyboard status for next keypress
     sw $zero, 0($s6)
     j game_loop
+    
 
 a_was_pressed:
     # DEBUG: A was pressed
     li   $v0, 4
     la   $a0, msg_key_pressed
+    syscall
+    lw $a0, 4($s6)          # load key code directly into $a0
+    li $v0, 11              # syscall 11 prints character in $a0
+    syscall
+    li $v0, 4
+    la $a0, newline
     syscall
 
     addi $a2, $a2, -1            # decrease x by 1 to move left, y is the same
@@ -326,7 +317,7 @@ a_was_pressed:
 
     jal  draw_pc_main
 
-    j done                 # for debug only
+    j done   # for debug only
     j after_keyboard_handled
 
 
@@ -350,6 +341,7 @@ you_cant_move_right:
    
 # This function erases a piece and
 # reverts back the checkerboard pattern that was originally there
+# This function works as intended
 erase_pc_main:
 	# $s0 = pointer to piece
 	# $a2 = x, $a3 = y
@@ -406,12 +398,11 @@ next_erase_row:
  	jr $ra
 	
 check_hitting_wall:
-	# s0 contains the index of the piece we want to wall test
-	# $a2 is the x coord
-	# $a3 is the y coord
-	# x cannot be 0 or 15 and
-	# y cannot be 31
-	li   $v1, 0           # Assume no collision
+    # s0 contains the index of the piece we want to wall test
+    # $a2 is the x coord (0 = left wall, 16 = right wall)
+    # $a3 is the y coord (31 = bottom wall)
+    # Returns: $v1 = 1 if collision, 0 otherwise
+    li   $v1, 0           # Assume no collision
     move $t2, $s0         # $t2 points to piece base
     li   $t0, 0           # row index
 
@@ -421,43 +412,43 @@ check_wall_row:
     li   $t4, 0           # column index
 
 check_wall_inner_loop:
-	beq $t4, 4, next_wall_row
-	# test bit: leftmost is bit 3
+    beq $t4, 4, next_wall_row
+    # test bit: leftmost is bit 3
     li   $t5, 3
-    sub  $t5, $t5, $t4
+    sub  $t5, $t5, $t4    # $t5 = 3 - column
     li   $t6, 1
-    sllv $t6, $t6, $t5
+    sllv $t6, $t6, $t5    # create bitmask
     and  $t7, $t1, $t6
-    beqz $t7, wall_skip_block   # skip if bit is 0 (not part of a block)
-	
-	# compute screen x = a2 + col, y = a3 + row
-    add  $t8, $a2, $t4
-    add  $t9, $a3, $t0
+    beqz $t7, wall_skip_block   # skip if bit is 0
+    
+    # compute screen coordinates
+    add  $t8, $a2, $t4    # x = a2 + col
+    add  $t9, $a3, $t0    # y = a3 + row
 
-    # check if x == 31
+    # check x boundaries (0 or 16)
+    beqz $t8, wall_collision    # x = 0 (left wall)
+    li   $t3, 16
+    beq  $t8, $t3, wall_collision # x = 16 (right wall)
+    
+    # check y boundary (31)
     li   $t3, 31
-    beq  $t8, $t3, wall_collision
-
-    # check if y == 0 or y == 15
-    li   $t3, 0
-    beq  $t9, $t3, wall_collision
-    li   $t3, 15
-    beq  $t9, $t3, wall_collision
+    beq  $t9, $t3, wall_collision # y = 31 (bottom wall)
     
 wall_skip_block:
-    addi $t4, $t4, 1
+    addi $t4, $t4, 1      # next column
     j check_wall_inner_loop
 
 next_wall_row:
     addi $t2, $t2, 2      # next 2-byte row
-    addi $t0, $t0, 1
+    addi $t0, $t0, 1      # next row
     j check_wall_row
 
 wall_collision:
-    li   $v1, 1           # set collision
-    jr   $ra
+    li $v1, 1             # set collision flag
+    jr $ra
 
 trump_is_happy:
+    li $v1, 0             # ensure no collision
     jr $ra
 
 # This function rotates a piece 90 degrees clockwise
