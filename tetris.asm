@@ -87,7 +87,8 @@ YELLOW: .word 0x00FFFF00
 ##############################################################################
 # S7 is the DISPLAY
 # S6 is the keyboard
-
+# S5 is the gravity counter
+# S1 stores the piece color
 ##############################################################################
 # Code
 ##############################################################################
@@ -268,6 +269,8 @@ sleep:
     addiu $s5, $s5, 100
     blt $s5, 1000, game_loop  # skip gravity if wait time under 1000ms
     #jal gravity 	# gravity the piece down
+    # check for piece-piece collisions in gravity funcyion
+    # check if a row is filled, delete the row and move everything down
     li $s5, 0    # reset counter after 1 second
     j game_loop
 
@@ -305,7 +308,6 @@ a_was_pressed:
     li   $v0, 4
     la   $a0, msg_erasing_piece
     syscall
-
     jal  erase_pc_main
 
     addi $a2, $a2, -1
@@ -315,29 +317,48 @@ a_was_pressed:
     la   $a0, msg_drawing_piece
     syscall
 
-    jal  draw_pc_main
-
-    j done   # for debug only
-    j after_keyboard_handled
+    jal  draw_pc_main # redraws the piece 1 left
+    j after_keyboard_handled # continue after key press
 
 
 you_cant_move_left:
-	# donithing
-	j after_keyboard_handled # continue the game
+	j after_keyboard_handled # do nothing and continue game
 
 d_was_pressed:
-    addi $a2, $a2, 1           # Try to move right (increase x)
-    jal check_hitting_wall     # Check for wall collision
-    addi $a2, $a2, -1		 # revert for erase
-    bnez $v1, you_cant_move_right  # If collision, revert and skip drawing
-    jal erase_pc_main # remove the old piece
-	addi $a2, $a2, 1 #move right
-    jal draw_pc_main           # If no collision, draw piece in new position
-    j after_keyboard_handled   # Continue game
+    # DEBUG: D was pressed
+    li   $v0, 4
+    la   $a0, msg_key_pressed
+    syscall
+    lw $a0, 4($s6)          # load key code directly into $a0
+    li $v0, 11              # syscall 11 prints character in $a0
+    syscall
+    li $v0, 4
+    la $a0, newline
+    syscall
+
+    addi $a2, $a2, 1             # increase x by 1 to move right, y is the same
+    jal  check_hitting_wall     # check if we can't move the piece right
+    addi $a2, $a2, -1
+    bnez $v1, you_cant_move_right # if yes, do nothing and go back to game
+
+    # DEBUG: Erasing piece
+    li   $v0, 4
+    la   $a0, msg_erasing_piece
+    syscall
+    jal  erase_pc_main
+
+    addi $a2, $a2, 1
+
+    # DEBUG: Drawing new piece
+    li   $v0, 4
+    la   $a0, msg_drawing_piece
+    syscall
+
+    jal  draw_pc_main # redraws the piece 1 right
+    j after_keyboard_handled # continue after key press
 
 you_cant_move_right:
-    # do nothing
-    j after_keyboard_handled   # Continue game
+    j after_keyboard_handled # do nothing and continue game
    
 # This function erases a piece and
 # reverts back the checkerboard pattern that was originally there
@@ -462,10 +483,8 @@ s_was_pressed:
 	j after_keyboard_handled
 
 after_keyboard_handled:
-    b done
-    # check for piece-piece collision
-	# then gravity
-	# check if any lines complete (hardest part)
+	sw $zero, 0($s6) # reset the keyboard and go back to main loop
+    j game_loop
 
 
 
