@@ -50,6 +50,7 @@ msg_drawing_piece:   .asciiz "Drawing new piece\n"
 msg_game_starting:	.asciiz "Game Starting\n"
 msg_wall_hit: .asciiz "Oh noes we hit trumps wall\n"
 msg_wall_safe: .asciiz "ice has deported the illegals\n"
+msg_game_over: .asciiz "Game Over Nigga\n"
 
 ##############################################################################
 # Immutable Data
@@ -87,6 +88,14 @@ current_piece: .space 8
 rotated_piece: .space 8
 
 # game over bozo
+LETTER_G:
+    .half 0x000F  # Row 0: 1111
+    .half 0x0008  # Row 1: 1000
+    .half 0x0009  # Row 2: 1001
+    .half 0x0009  # Row 3: 1001
+    .half 0x000F  # Row 4: 1111
+
+
 
 ##############################################################################
 # Mutable Data
@@ -738,23 +747,111 @@ nap_time:
 	syscall
 	jr $ra
     
+    
+# Inputs:
+#   $a0 = letter bitmap base address
+#   $a1 = x position in units (0 to 12)
+#   $a2 = y position in units (0 to 24)
+draw_letter_5x4:
+    move $t2, $a0           # $t2 = letter bitmap address (from $a0)
+    li   $t0, 0             # row counter (0 to 4)
+
+draw_letter_row:
+    beq  $t0, 5, fuck_assembly  # done after 5 rows
+    lhu  $t1, 0($t2)        # load halfword row data
+    li   $t4, 0             # col counter (0 to 3)
+
+draw_letter_col:
+    beq  $t4, 4, gmovr_next_row  # done after 4 cols
+
+    # Check if current bit is set (1)
+    li   $t5, 3
+    sub  $t5, $t5, $t4      # bit index (3 → 0)
+    li   $t6, 1
+    sllv $t6, $t6, $t5      # mask for bit (3 - col)
+    and  $t7, $t1, $t6
+    beqz $t7, gmovr_skip_draw  # skip if bit = 0
+
+    # Calculate pixel position (units → pixels)
+    add  $t8, $a1, $t4      # x = input_x + col (units)
+    add  $t9, $a2, $t0      # y = input_y + row (units)
+    sll  $t8, $t8, 3        # x * 8 (→ pixels)
+    sll  $t9, $t9, 3        # y * 8 (→ pixels)
+
+    # Draw 8×8 block (loop over pixels)
+    li   $t3, 0             # inner row (0 to 7)
+    li   $t5, 0             # inner col (0 to 7)
+
+draw_block_pixels:
+    beq  $t3, 8, gmovr_skip_draw  # done with block
+    beq  $t5, 8, next_block_row
+
+    # Pixel offset = (y + inner_row) * 128 + (x + inner_col)
+    add  $t6, $t9, $t3      # y + inner_row
+    add  $t7, $t8, $t5      # x + inner_col
+    mul  $t6, $t6, 128      # y * display width (128)
+    add  $t6, $t6, $t7      # + x
+    sll  $t6, $t6, 2        # * 4 (bytes per pixel)
+    add  $t7, $s7, $t6      # final pixel address
+    sw   $s1, 0($t7)        # write color
+
+    addi $t5, $t5, 1        # next inner col
+    j    draw_block_pixels
+
+next_block_row:
+    li   $t5, 0             # reset inner col
+    addi $t3, $t3, 1        # next inner row
+    j    draw_block_pixels
+
+gmovr_skip_draw:
+    addi $t4, $t4, 1        # next col
+    j    draw_letter_col
+
+gmovr_next_row:
+    addi $t2, $t2, 2        # next halfword row
+    addi $t0, $t0, 1        # next row
+    j    draw_letter_row
+
+fuck_assembly:
+    jr   $ra                # return
+  
 done: # debugging only
 	# draw the game over screen
 	# clear everything first
-	li $t1, 32768          # total number of pixels to clear (128*256)
-    li $t2, 0x00000000     # black color (zero)
-    move $t0, $s7          # start address of display memory
+	li $a2, 0
+	li $a3, 0
+	# clear the mf board
+	la   $t0, all_pieces        # base address of pieces
+	addiu $s0, $t0, 8          # offset to O piece
+	li   $s1, 0xffffffff       # black color
+	li   $t2, 0                # y position in units
 
 clear_loop:
-    beq $t1, $zero, game_over_yay
-    sw $t2, 0($t0)         # store black pixel
-    addiu $t0, $t0, 4      # move to next pixel (word)
-    addiu $t1, $t1, -1
+    # Exit if y > 31
+    li   $t0, 32
+    bge  $a3, $t0, game_over_yay
+
+    # Draw black O piece at (x = $a2, y = $a3)
+    la   $a0, O             # O piece address
+    li   $a1, 0xffffffff   # White color
+    jal  draw_pc_main
+
+    # Check if x < 16
+    li   $t1, 16
+    blt  $a2, $t1, continue_row
+
+    # If x ≥ 16, reset x = 0, y += 2
+    li    $a2, 0
+    addiu $a3, $a3, 2
+    j clear_loop
+
+continue_row:
+    addiu $a2, $a2, 2       # Move to next column
     j clear_loop
 
 game_over_yay:
-	li $v0, 10
+	li $v0, 4
+	la, $a0, msg_game_over
 	syscall
-
-		li $v0, 10
+	li $v0, 10
 	syscall
