@@ -86,6 +86,8 @@ YELLOW: .word 0x00FFFF00
 current_piece: .space 8
 rotated_piece: .space 8
 
+# game over bozo
+
 ##############################################################################
 # Mutable Data
 ##############################################################################
@@ -737,5 +739,22 @@ nap_time:
 	jr $ra
     
 done: # debugging only
+	# draw the game over screen
+	# clear everything first
+	li $t1, 32768          # total number of pixels to clear (128*256)
+    li $t2, 0x00000000     # black color (zero)
+    move $t0, $s7          # start address of display memory
+
+clear_loop:
+    beq $t1, $zero, game_over_yay
+    sw $t2, 0($t0)         # store black pixel
+    addiu $t0, $t0, 4      # move to next pixel (word)
+    addiu $t1, $t1, -1
+    j clear_loop
+
+game_over_yay:
 	li $v0, 10
+	syscall
+
+		li $v0, 10
 	syscall
