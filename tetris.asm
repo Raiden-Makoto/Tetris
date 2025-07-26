@@ -88,13 +88,7 @@ current_piece: .space 8
 rotated_piece: .space 8
 
 # game over bozo
-LETTER_G:
-    .half 0x000F  # Row 0: 1111
-    .half 0x0008  # Row 1: 1000
-    .half 0x0009  # Row 2: 1001
-    .half 0x0009  # Row 3: 1001
-    .half 0x000F  # Row 4: 1111
-
+g_piece: .half 0x000F, 0x0008, 0x0008, 0x0009, 0x0009, 0x000F
 
 
 ##############################################################################
@@ -746,79 +740,11 @@ nap_time:
 	li $v0, 32
 	syscall
 	jr $ra
-    
-    
-# Inputs:
-#   $a0 = letter bitmap base address
-#   $a1 = x position in units (0 to 12)
-#   $a2 = y position in units (0 to 24)
-draw_letter_5x4:
-    move $t2, $a0           # $t2 = letter bitmap address (from $a0)
-    li   $t0, 0             # row counter (0 to 4)
-
-draw_letter_row:
-    beq  $t0, 5, fuck_assembly  # done after 5 rows
-    lhu  $t1, 0($t2)        # load halfword row data
-    li   $t4, 0             # col counter (0 to 3)
-
-draw_letter_col:
-    beq  $t4, 4, gmovr_next_row  # done after 4 cols
-
-    # Check if current bit is set (1)
-    li   $t5, 3
-    sub  $t5, $t5, $t4      # bit index (3 → 0)
-    li   $t6, 1
-    sllv $t6, $t6, $t5      # mask for bit (3 - col)
-    and  $t7, $t1, $t6
-    beqz $t7, gmovr_skip_draw  # skip if bit = 0
-
-    # Calculate pixel position (units → pixels)
-    add  $t8, $a1, $t4      # x = input_x + col (units)
-    add  $t9, $a2, $t0      # y = input_y + row (units)
-    sll  $t8, $t8, 3        # x * 8 (→ pixels)
-    sll  $t9, $t9, 3        # y * 8 (→ pixels)
-
-    # Draw 8×8 block (loop over pixels)
-    li   $t3, 0             # inner row (0 to 7)
-    li   $t5, 0             # inner col (0 to 7)
-
-draw_block_pixels:
-    beq  $t3, 8, gmovr_skip_draw  # done with block
-    beq  $t5, 8, next_block_row
-
-    # Pixel offset = (y + inner_row) * 128 + (x + inner_col)
-    add  $t6, $t9, $t3      # y + inner_row
-    add  $t7, $t8, $t5      # x + inner_col
-    mul  $t6, $t6, 128      # y * display width (128)
-    add  $t6, $t6, $t7      # + x
-    sll  $t6, $t6, 2        # * 4 (bytes per pixel)
-    add  $t7, $s7, $t6      # final pixel address
-    sw   $s1, 0($t7)        # write color
-
-    addi $t5, $t5, 1        # next inner col
-    j    draw_block_pixels
-
-next_block_row:
-    li   $t5, 0             # reset inner col
-    addi $t3, $t3, 1        # next inner row
-    j    draw_block_pixels
-
-gmovr_skip_draw:
-    addi $t4, $t4, 1        # next col
-    j    draw_letter_col
-
-gmovr_next_row:
-    addi $t2, $t2, 2        # next halfword row
-    addi $t0, $t0, 1        # next row
-    j    draw_letter_row
-
-fuck_assembly:
-    jr   $ra                # return
   
 done: # debugging only
 	# draw the game over screen
 	# clear the annoying ass corner
-	li $t0, 0x00       # black pixel
+	li $t0, 0x00000000       # black pixel
 
     # Row 0 (y = 0)
     sb $t0, 0($s7)
@@ -906,7 +832,7 @@ done: # debugging only
 	li $a3, 0
 	la   $t0, all_pieces        # base address of pieces
 	addiu $s0, $t0, 8          # offset to O piece
-	li   $s1, 0x0       # black color
+	li   $s1, 0x00000000       # black color
 	li   $t2, 0                # y position in units
 
 clear_loop:
@@ -931,9 +857,61 @@ continue_row:
     addiu $a2, $a2, 2       # Move to next column
     j clear_loop
 
+gmovr_draw_pc_main:
+    move $t2, $s0        # $t2 = address of piece data (g_piece)
+    li   $t0, 0          # $t0 = row counter (0 to 5)
+
+gmovr_draw_pc_row:
+    beq $t0, 6, gmovr_done_drawing  # Changed from 4 to 6 for height
+    lhu  $t1, 0($t2)     # load row data (4 columns in bits 3-0)
+    li   $t4, 0          # $t4 = column counter (0 to 3)
+
+gmovr_draw_pc_inner:
+    beq $t4, 4, gmovr_next_row  # Process 4 columns
+
+    # Check each of 4 bits (columns)
+    li   $t5, 3          # Changed from 5 to 3 (4 columns)
+    sub  $t5, $t5, $t4   # $t5 = 3 - current column
+    li   $t6, 1
+    sllv $t6, $t6, $t5   # create mask for current bit
+    and  $t7, $t1, $t6   # check if bit is set
+    beqz $t7, gmovr_do_nothing
+
+    # Calculate screen position (unchanged)
+    add  $t8, $a2, $t4   # x position
+    add  $t9, $a3, $t0   # y position
+    mul  $t3, $t9, 16    # Assuming 16-unit screen width
+    add  $t3, $t3, $t8
+    sll  $t3, $t3, 2     # bytes per pixel
+    add  $t6, $s7, $t3   # framebuffer address
+    sw   $s1, 0($t6)     # store color
+
+gmovr_do_nothing:
+    addi $t4, $t4, 1
+    j gmovr_draw_pc_inner
+
+gmovr_next_row:
+    addi $t2, $t2, 2     # next halfword row
+    addi $t0, $t0, 1     # increment row counter
+    j gmovr_draw_pc_row
+
+gmovr_done_drawing:
+    jr $ra
+
 game_over_yay:
-	li $v0, 4
-	la, $a0, msg_game_over
-	syscall
-	li $v0, 10
-	syscall
+	# Print game over message
+    li $v0, 4
+    la $a0, msg_game_over
+    syscall
+	# Draw GAME OVER using block letters
+    li $a2, 0           # initial x position
+    li $a3, 4           # initial y position
+    li $s1, 0xFFFFFFFF  # white color
+    
+    # Draw letter G
+    la $s0, g_piece     # load G piece data
+    jal gmovr_draw_pc_main
+    
+    # Exit program
+    li $v0, 10
+    syscall
