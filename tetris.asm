@@ -307,7 +307,6 @@ process_key:
     sw $zero, 0($s6)
     j game_loop
     
-
 a_was_pressed:
     # DEBUG: A was pressed
     li   $v0, 4
@@ -495,19 +494,242 @@ trump_is_happy:
 
 # This function rotates a piece 90 degrees clockwise
 w_was_pressed:
-	jal nap_time
-	j after_keyboard_handled
+	li   $v0, 4
+    la   $a0, msg_key_pressed
+    syscall
+    lw $a0, 4($s6)          # load key code directly into $a0
+    li $v0, 11              # syscall 11 prints character in $a0
+    syscall
+    li $v0, 4
+    la $a0, newline
+    syscall
+    # rotate the piece here
+    jal check_if_opc
+	bnez $v0, after_keyboard_handled
+    # if its not the o piece
+    # srs wall-kicks may be needed before we can draw
+    # the piece or reject the rotation
+    la $s2, rotated_piece
+    jal rotate_piece_cw
+    # remove the old piece from the board before moving new piece in
+	jal erase_pc_main 
+    # Copy rotated_piece to current_piece, assuming rotation is valid
+	lhu $t0, 0($s2)
+	lhu $t1, 2($s2)
+	lhu $t2, 4($s2)
+	lhu $t3, 6($s2)
+	sh $t0, 0($s0)
+	sh $t1, 2($s0)
+	sh $t2, 4($s0)
+	sh $t3, 6($s0)
+	# clear the rotated_piece for next rotation
+	sh $zero, 0($s2)
+	sh $zero, 2($s2)
+	sh $zero, 4($s2)
+	sh $zero, 6($s2)
+	jal draw_pc_main # draw the rotated piece
+	#no need to change $a2 or $a3
+
+	j after_keyboard_handled # keep goin
+
+rotate_piece_cw:
+	# $s0 points to current piece (in current_piece .space 8)
+    # $s2 points to rotated data (in rotated_piece .space 8)
+    # $t0-$t7 as temp registers
+    # The bit at (i,j) goes to (3-j, i)
+    # Load all 4 rows at once cus I'm lazy and we're hardcoding
+    lhu $t0, 0($s0)   # Row 0
+    lhu $t1, 2($s0)   # Row 1 
+    lhu $t2, 4($s0)   # Row 2
+    lhu $t3, 6($s0)   # Row 3
+    # Manually rotate the columns because I'm sick and tired of this bullshit
+    # Rotated Row 0 = Original Column 3 (bits from bottom to top)
+    andi $t4, $t0, 0x0008   # Row 0, bit 3 (value 8)
+    srl $t4, $t4, 3         # Move to bit 0
+    andi $t5, $t1, 0x0008   # Row 1, bit 3
+    srl $t5, $t5, 2         # Move to bit 1
+    andi $t6, $t2, 0x0008   # Row 2, bit 3  
+    srl $t6, $t6, 1         # Move to bit 2
+    andi $t7, $t3, 0x0008   # Row 3, bit 3
+    or $t4, $t4, $t5        # Combine bits
+    or $t4, $t4, $t6
+    or $t4, $t4, $t7
+    sh $t4, 0($s2)  # Store rotated row 0
+    # Rotated Row 1 = Original Column 2 (bits from bottom to top)
+    andi $t4, $t0, 0x0004  # Row 0, bit 2 (value 4)
+    srl $t4, $t4, 2         # Move to bit 0
+    andi $t5, $t1, 0x0004   # Row 1, bit 2
+    srl $t5, $t5, 1         # Move to bit 1
+    andi $t6, $t2, 0x0004   # Row 2, bit 2
+    andi $t7, $t3, 0x0004   # Row 3, bit 2
+    sll $t7, $t7, 1         # Move to bit 3
+    or $t4, $t4, $t5
+    or $t4, $t4, $t6
+    or $t4, $t4, $t7
+    sh $t4, 2($s2)  # Store rotated row 1
+    # Rotated Row 2 = Original Column 1 (bits from bottom to top)
+    andi $t4, $t0, 0x0002  # Row 0, bit 1 (value 2)
+    srl $t4, $t4, 1         # Move to bit 0
+    andi $t5, $t1, 0x0002   # Row 1, bit 1
+    andi $t6, $t2, 0x0002   # Row 2, bit 1
+    sll $t6, $t6, 1         # Move to bit 2
+    andi $t7, $t3, 0x0002   # Row 3, bit 1
+    sll $t7, $t7, 2         # Move to bit 3
+    or $t4, $t4, $t5
+    or $t4, $t4, $t6
+    or $t4, $t4, $t7
+    sh $t4, 4($s2) # Store rotated row 2
+    # Rotated Row 3 = Original Column 0 (bits from bottom to top)
+    andi $t4, $t0, 0x0001  # Row 0, bit 0 (value 1)
+    andi $t5, $t1, 0x0001   # Row 1, bit 0
+    sll $t5, $t5, 1         # Move to bit 1
+    andi $t6, $t2, 0x0001   # Row 2, bit 0
+    sll $t6, $t6, 2         # Move to bit 2
+    andi $t7, $t3, 0x0001   # Row 3, bit 0
+    sll $t7, $t7, 3         # Move to bit 3
+    or $t4, $t4, $t5
+    or $t4, $t4, $t6
+    or $t4, $t4, $t7
+    sh $t4, 6($s2) # Store rotated row 3
+
+    jr $ra                 
 
 # Tis function ratates a piece 90 degrees ccw
 s_was_pressed:
-	jal nap_time
-	j after_keyboard_handled
+	li   $v0, 4
+    la   $a0, msg_key_pressed
+    syscall
+    lw $a0, 4($s6)          # load key code directly into $a0
+    li $v0, 11              # syscall 11 prints character in $a0
+    syscall
+    li $v0, 4
+    la $a0, newline
+    syscall
+    # rotate the piece here
+    # if not o piece
+    jal check_if_opc
+	bnez $v0, after_keyboard_handled
+    # srs wall-kicks may be needed before we can draw
+    # the piece or reject the rotation
+    la $s2, rotated_piece
+    jal rotate_piece_ccw
+    # remove the old piece from the board before moving new piece in
+	jal erase_pc_main 
+    # Copy rotated_piece to current_piece, assuming rotation is valid
+	lhu $t0, 0($s2)
+	lhu $t1, 2($s2)
+	lhu $t2, 4($s2)
+	lhu $t3, 6($s2)
+	sh $t0, 0($s0)
+	sh $t1, 2($s0)
+	sh $t2, 4($s0)
+	sh $t3, 6($s0)
+	# clear the rotated_piece for next rotation
+	sh $zero, 0($s2)
+	sh $zero, 2($s2)
+	sh $zero, 4($s2)
+	sh $zero, 6($s2)
+	jal draw_pc_main # draw the rotated piece
+	#no need to change $a2 or $a3
+
+	j after_keyboard_handled # keep goin
+
+
+rotate_piece_ccw:
+	# $s0 points to current piece (in current_piece .space 8)
+    # $s2 points to rotated data (in rotated_piece .space 8)
+    # $t0-$t7 as temp registers
+    # The bit at (i,j) goes to (3-j, i)
+    # Load all 4 rows at once cus I'm lazy and we're hardcoding
+	lhu $t0, 0($s0)   # Row 0
+	lhu $t1, 2($s0)   # Row 1
+	lhu $t2, 4($s0)   # Row 2
+	lhu $t3, 6($s0)   # Row 3
+	# Rotated Row 0 = Original Column 0 (bits from top to bottom)
+	andi $t4, $t0, 0x8   # Row 0, bit 3
+	srl  $t4, $t4, 3     # Move bit 3 to bit 0
+	andi $t5, $t1, 0x8   # Row 1, bit 3
+	srl  $t5, $t5, 2     # Move bit 3 to bit 1
+	andi $t6, $t2, 0x8   # Row 2, bit 3
+	srl  $t6, $t6, 1     # Move bit 3 to bit 2
+	andi $t7, $t3, 0x8   # Row 3, bit 3
+	or   $t4, $t4, $t5
+	or   $t4, $t4, $t6
+	or   $t4, $t4, $t7   # Bit 3 stays at bit 3 here
+	sh   $t4, 0($s2)
+
+	# Rotated Row 1 = Original Column 1 (bits from top to bottom)
+	andi $t4, $t0, 0x4   # Row 0, bit 2
+	srl  $t4, $t4, 2     # Move bit 2 to bit 0
+	andi $t5, $t1, 0x4   # Row 1, bit 2
+	srl  $t5, $t5, 1     # Move bit 2 to bit 1
+	andi $t6, $t2, 0x4   # Row 2, bit 2
+	andi $t7, $t3, 0x4   # Row 3, bit 2
+	sll  $t7, $t7, 1     # Move bit 2 to bit 3
+	or   $t4, $t4, $t5
+	or   $t4, $t4, $t6
+	or   $t4, $t4, $t7
+	sh   $t4, 2($s2)
+
+	# Rotated Row 2 = Original Column 2 (bits from top to bottom)
+	andi $t4, $t0, 0x2   # Row 0, bit 1
+	srl  $t4, $t4, 1     # Move bit 1 to bit 0
+	andi $t5, $t1, 0x2   # Row 1, bit 1
+	andi $t6, $t2, 0x2   # Row 2, bit 1
+	sll  $t6, $t6, 1     # Move bit 1 to bit 2
+	andi $t7, $t3, 0x2   # Row 3, bit 1
+	sll  $t7, $t7, 2     # Move bit 1 to bit 3
+	or   $t4, $t4, $t5
+	or   $t4, $t4, $t6
+	or   $t4, $t4, $t7
+	sh   $t4, 4($s2)
+
+	# Rotated Row 3 = Original Column 3 (bits from top to bottom)
+	andi $t4, $t0, 0x1   # Row 0, bit 0
+	andi $t5, $t1, 0x1   # Row 1, bit 0
+	sll  $t5, $t5, 1     # Move bit 0 to bit 1
+	andi $t6, $t2, 0x1   # Row 2, bit 0
+	sll  $t6, $t6, 2     # Move bit 0 to bit 2
+	andi $t7, $t3, 0x1   # Row 3, bit 0
+	sll  $t7, $t7, 3     # Move bit 0 to bit 3
+	or   $t4, $t4, $t5
+	or   $t4, $t4, $t6
+	or   $t4, $t4, $t7
+	sh   $t4, 6($s2)
+
+	jr $ra
+
+# Input:  $s0 points to current piece (4 half-words)
+# Output: $v0 = 1 if O piece, else 0
+
+check_if_opc:
+    lhu $t0, 0($s0)       # Row 0
+    lhu $t1, 2($s0)       # Row 1
+    lhu $t2, 4($s0)       # Row 2
+    lhu $t3, 6($s0)       # Row 3
+
+    li  $t4, 0x0006       # Expected value for row 0 and 1
+    li  $t5, 0x0000       # Expected value for row 2 and 3
+
+    xor $t6, $t0, $t4     # $t6 = 0 if match
+    xor $t7, $t1, $t4
+    or  $t6, $t6, $t7
+    xor $t7, $t2, $t5
+    or  $t6, $t6, $t7
+    xor $t7, $t3, $t5
+    or  $t6, $t6, $t7     # $t6 = 0 only if all rows match
+
+    li  $v0, 0            # Default: not O-piece
+    beqz $t6, is_opiece
+    jr  $ra
+
+is_opiece:
+    li $v0, 1
+    jr $ra
 
 after_keyboard_handled:
 	sw $zero, 0($s6) # reset the keyboard and go back to main loop
     j game_loop
-
-
 
 nap_time:
 	li $v0, 32
