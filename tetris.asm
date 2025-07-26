@@ -817,13 +817,96 @@ fuck_assembly:
   
 done: # debugging only
 	# draw the game over screen
-	# clear everything first
+	# clear the annoying ass corner
+	li $t0, 0x00       # black pixel
+
+    # Row 0 (y = 0)
+    sb $t0, 0($s7)
+    sb $t0, 1($s7)
+    sb $t0, 2($s7)
+    sb $t0, 3($s7)
+    sb $t0, 4($s7)
+    sb $t0, 5($s7)
+    sb $t0, 6($s7)
+    sb $t0, 7($s7)
+
+    # Row 1 (y = 1): offset = 128
+    sb $t0, 128($s7)
+    sb $t0, 129($s7)
+    sb $t0, 130($s7)
+    sb $t0, 131($s7)
+    sb $t0, 132($s7)
+    sb $t0, 133($s7)
+    sb $t0, 134($s7)
+    sb $t0, 135($s7)
+
+    # Row 2 (y = 2): offset = 256
+    sb $t0, 256($s7)
+    sb $t0, 257($s7)
+    sb $t0, 258($s7)
+    sb $t0, 259($s7)
+    sb $t0, 260($s7)
+    sb $t0, 261($s7)
+    sb $t0, 262($s7)
+    sb $t0, 263($s7)
+
+    # Row 3 (y = 3): offset = 384
+    sb $t0, 384($s7)
+    sb $t0, 385($s7)
+    sb $t0, 386($s7)
+    sb $t0, 387($s7)
+    sb $t0, 388($s7)
+    sb $t0, 389($s7)
+    sb $t0, 390($s7)
+    sb $t0, 391($s7)
+
+    # Row 4 (y = 4): offset = 512
+    sb $t0, 512($s7)
+    sb $t0, 513($s7)
+    sb $t0, 514($s7)
+    sb $t0, 515($s7)
+    sb $t0, 516($s7)
+    sb $t0, 517($s7)
+    sb $t0, 518($s7)
+    sb $t0, 519($s7)
+
+    # Row 5 (y = 5): offset = 640
+    sb $t0, 640($s7)
+    sb $t0, 641($s7)
+    sb $t0, 642($s7)
+    sb $t0, 643($s7)
+    sb $t0, 644($s7)
+    sb $t0, 645($s7)
+    sb $t0, 646($s7)
+    sb $t0, 647($s7)
+
+    # Row 6 (y = 6): offset = 768
+    sb $t0, 768($s7)
+    sb $t0, 769($s7)
+    sb $t0, 770($s7)
+    sb $t0, 771($s7)
+    sb $t0, 772($s7)
+    sb $t0, 773($s7)
+    sb $t0, 774($s7)
+    sb $t0, 775($s7)
+
+    # Row 7 (y = 7): offset = 896
+    sb $t0, 896($s7)
+    sb $t0, 897($s7)
+    sb $t0, 898($s7)
+    sb $t0, 899($s7)
+    sb $t0, 900($s7)
+    sb $t0, 901($s7)
+    sb $t0, 902($s7)
+    sb $t0, 903($s7)
+	
+	
+	# everything else
 	li $a2, 0
 	li $a3, 0
-	# clear the mf board
 	la   $t0, all_pieces        # base address of pieces
 	addiu $s0, $t0, 8          # offset to O piece
-	li   $s1, 0xffffffff       # black color
+	li   $s1, 0x0       # black color
 	li   $t2, 0                # y position in units
 
 clear_loop:
@@ -833,7 +916,6 @@ clear_loop:
 
     # Draw black O piece at (x = $a2, y = $a3)
     la   $a0, O             # O piece address
-    li   $a1, 0xffffffff   # White color
     jal  draw_pc_main
 
     # Check if x < 16
