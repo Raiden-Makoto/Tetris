@@ -89,6 +89,12 @@ rotated_piece: .space 8
 
 # game over bozo
 g_piece: .half 0x000F, 0x0008, 0x0008, 0x0009, 0x0009, 0x000F
+a_piece: .half 0x0006, 0x0009, 0x0009, 0x000F, 0x0009, 0x0009  
+m_piece: .half 0x0009, 0x000F, 0x0009, 0x0009, 0x0009, 0x0009
+e_piece: .half 0x000F, 0x0008, 0x000F, 0x0008, 0x0008, 0x000F
+o_piece: .half 0x000F, 0x0009, 0x0009, 0x0009, 0x0009, 0x000F
+v_piece: .half 0x0009, 0x0009, 0x0009, 0x0009, 0x0006, 0x0006
+r_piece: .half 0x000E, 0x0009, 0x000E, 0x000C, 0x000A, 0x0009
 
 
 ##############################################################################
@@ -905,11 +911,56 @@ game_over_yay:
     syscall
 	# Draw GAME OVER using block letters
     li $a2, 0           # initial x position
-    li $a3, 4           # initial y position
-    li $s1, 0xFFFFFFFF  # white color
-    
+    li $a3, 8           # initial y position
     # Draw letter G
+    la $t0, RED
+    lw $s1, 0($t0)  
     la $s0, g_piece     # load G piece data
+    jal gmovr_draw_pc_main
+    # Draw letter A
+    la $t0, ORANGE
+    lw $s1, 0($t0)  
+    addi $a2, $a2, 4
+    la $s0, a_piece
+    jal gmovr_draw_pc_main
+    # Draw letter M
+    la $t0, YELLOW
+    lw $s1, 0($t0)  
+    addi $a2, $a2, 4
+    la $s0, m_piece
+    jal gmovr_draw_pc_main
+    # Draw letter E
+    la $t0, GREEN
+    lw $s1, 0($t0)  
+    addi $a2, $a2, 4
+    la $s0, e_piece
+    jal gmovr_draw_pc_main
+    
+    # next line
+    addi $a3, $a3, 7
+    # Draw letter O
+    la $t0, LITE_BLUE
+    lw $s1, 0($t0)  
+    addi $a2, $a2, 4
+    la $s0, o_piece
+    jal gmovr_draw_pc_main
+    # Draw letter V
+    la $t0, DARK_BLUE
+    lw $s1, 0($t0)  
+    addi $a2, $a2, 4
+    la $s0, v_piece
+    jal gmovr_draw_pc_main
+    # Draw letter E
+    la $t0, PURPLE
+    lw $s1, 0($t0)  
+    addi $a2, $a2, 4
+    la $s0, e_piece
+    jal gmovr_draw_pc_main
+    # Draw letter R
+    la $t0, RED
+    lw $s1, 0($t0)  
+    addi $a2, $a2, 4
+    la $s0, r_piece
     jal gmovr_draw_pc_main
     
     # Exit program
