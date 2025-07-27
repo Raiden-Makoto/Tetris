@@ -51,6 +51,13 @@ msg_game_starting:	.asciiz "Game Starting\n"
 msg_wall_hit: .asciiz "Oh noes we hit trumps wall\n"
 msg_wall_safe: .asciiz "ice has deported the illegals\n"
 msg_game_over: .asciiz "Ur kinda bad at ts game\n"
+msg_lock_piece :.asciiz "Get locked up nigga\n"
+msg_gravity: .asciiz "Moving piece down\n"
+msg_wallcheck: .asciiz "Checking if piece will hit wall\n"
+msg_pcpc: .asciiz "Checking for piece-piece collision\n"
+msg_storage_complete: .asciiz "Collision Grid storage complete\n"
+msg_cc_done: .asciiz "Collision check between pieces complete\n"
+msg_wtfhappen: .asciiz "What the fuck happened\n"
 
 ##############################################################################
 # Immutable Data
@@ -301,8 +308,12 @@ sleep:
     li $a0, 100
     jal nap_time            # sleep for 100ms 
     addiu $s5, $s5, 100
-    blt $s5, 1000, game_loop  # skip gravity if wait time under 1000ms
-    #j gravity 	# gravity the piece down
+    blt $s5, 2000, game_loop  # skip gravity if wait time under 1900ms 
+    # it takes 100ms to do gravity
+    li $v0, 4
+    la $a0, msg_gravity
+    syscall
+    j gravity 	# gravity the piece down
     # gravity will hand control back to game_loop
 
 process_key:
@@ -671,22 +682,98 @@ is_opiece:
 gravity:
 	# implements gravity
 	jal erase_pc_main # remove the piece from the board before storing
-	jal store_collision_grid    
-	jal check_for_collision # TODO
-	beqz $v0, no_boom_boom
-	jal draw_pc_main # put the piece back
+	jal store_collision_grid # store the grid below
+	addi $a3, $a3, 1 # increase y by 1
+	li $v0, 4
+	la $a0, msg_wallcheck
+	syscall
+	jal check_hitting_wall # check if it'll hit a wall if we move it down
+	beq $v1, 1, lock_piece #if it does we lock the piece a row lower and spawn a new one
+	# if it doesnt, move the piece back up and check for piece-piece collision
+	addi $a3, $a3, -1
+	li $v0, 4
+	la $a0, msg_pcpc
+	syscall
+	jal check_for_collision # does thie fucking piece collide
+	li $v0, 4
+	la $a0, msg_cc_done
+	syscall
+	beqz $v1, no_boom_boom # if it doesnt, draw one row lower
+	# if it does, we can't move it down
+	j lock_piece # so lock the piece
+
+	
+lock_piece:
+	# the piece hit the bottom wall so we have to spawn a new one
+	li $v0, 4
+	la $a0, msg_lock_piece
+	syscall
+	jal draw_pc_main # make sure to actually draw it
+	jal random_bs_go # random piece and color
+	li $a2, 6 # spawn x
+	li $a3, 0 # spawn y
+	jal draw_pc_main # spawn the new piece
 	li $s5, 0    # reset gravity counter
-	j game_loop # back to game
+	li $v0, 10
+	syscall
+	#j game_loop # continue the game
   
 no_boom_boom:
-	addi $a3, $a3, 1
-	jal draw_pc_main # draw piece one row down
+	li $v0, 4
+	la $a0, msg_wall_safe
+	syscall
+	addi $a3, $a3, 1 # move a row down
+	jal draw_pc_main # draw piece
 	li $s5, 0    # reset gravity counter
-	j game_loop # back to game
+	li $v0, 10
+	syscall
+	#j game_loop # back to game
 	
 check_for_collision:
-	j done
+	la $s0, current_piece
+	jal store_collision_grid
+	la $t9, grid_below
+	lw $s3, 0($t9)
+	lw $s4, 4($t9)
+	#check each row for collision
+	# Row 0 (h0)
+    lhu $t0, 0($s0)         # Piece row0
+    andi $t1, $s3, 0xFFFF   # Grid row0
+    and $t2, $t0, $t1
+    bnez $t2, collision_found
+
+    # Row 1 (h1)
+    lhu $t0, 2($s0)         # Piece row1
+    srl $t1, $s3, 16        # Grid row1
+    andi $t1, $t1, 0xFFFF
+    and $t2, $t0, $t1
+    bnez $t2, collision_found
+
+    # Row 2 (h2)
+    lhu $t0, 4($s0)         # Piece row2
+    andi $t1, $s4, 0xFFFF   # Grid row2
+    and $t2, $t0, $t1
+    bnez $t2, collision_found
+
+    # Row 3 (h3)
+    lhu $t0, 6($s0)         # Piece row3
+    srl $t1, $s4, 16        # Grid row3
+    and $t2, $t0, $t1
+    bnez $t2, collision_found
+
+    li $v1, 0
+    li $v0, 4
+    la $a0, msg_wtfhappen
+    syscall
+    jr $ra
 	
+collision_found:
+	li $v0, 4
+	la $a0, msg_wtfhappen
+	syscall
+	li $v1, 1
+	jr $ra
+
 
 # store a copy of the 4x4 grid one row below top of piece
 store_collision_grid:
@@ -735,6 +822,9 @@ store_mask:
 	j store_row_cg
 	
 storage_complete:
+	li $v0, 4
+	la $a0, msg_storage_complete
+	syscall
 	jr $ra
 
 after_keyboard_handled:
@@ -746,7 +836,7 @@ nap_time:
 	syscall
 	jr $ra
   
-done: # debugging only
+done:
 	# draw the game over screen
 	# clear the annoying corner
 	li $t0, 0x00000000 # black pixel
