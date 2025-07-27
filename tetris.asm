@@ -25,12 +25,12 @@
 # 2. (fill in the feature, if any)
 # ... (add more if necessary)
 # How to play:
-# (Include any instructions)
+# Make a reasonable assumption
 # Link to video demonstration for final submission:
 # - (insert YouTube / MyMedia / other URL here). Make sure we can view it!
 #
 # Are you OK with us sharing the video with people outside course staff?
-# - yes / no
+# - no
 #
 # Any additional information that the TA needs to know:
 # - (write here, if any)
@@ -50,7 +50,7 @@ msg_drawing_piece:   .asciiz "Drawing new piece\n"
 msg_game_starting:	.asciiz "Game Starting\n"
 msg_wall_hit: .asciiz "Oh noes we hit trumps wall\n"
 msg_wall_safe: .asciiz "ice has deported the illegals\n"
-msg_game_over: .asciiz "Game Over Nigga\n"
+msg_game_over: .asciiz "Ur kinda bad at ts game\n"
 
 ##############################################################################
 # Immutable Data
@@ -86,6 +86,8 @@ YELLOW: .word 0x00FFFF00
 # Piece states for rotation
 current_piece: .space 8
 rotated_piece: .space 8
+grid_below: .space 8 # contains the 4x4 grid under the piece
+# ^ only used when checking gravity, stays zeroed all other times
 
 # game over bozo
 g_piece: .half 0x000F, 0x0008, 0x0008, 0x0009, 0x0009, 0x000F
@@ -319,34 +321,10 @@ process_key:
     j game_loop
     
 a_was_pressed:
-    # DEBUG: A was pressed
-    li   $v0, 4
-    la   $a0, msg_key_pressed
-    syscall
-    lw $a0, 4($s6)          # load key code directly into $a0
-    li $v0, 11              # syscall 11 prints character in $a0
-    syscall
-    li $v0, 4
-    la $a0, newline
-    syscall
-
     addi $a2, $a2, -1            # decrease x by 1 to move left, y is the same
     jal  check_hitting_wall      # check if we cant move the piece left
     addi $a2, $a2, 1
     bnez $v1, you_cant_move_left # if yes, do nothing and go back to game
-
-    # DEBUG: Erasing piece
-    li   $v0, 4
-    la   $a0, msg_erasing_piece
-    syscall
-    jal  erase_pc_main
-
-    addi $a2, $a2, -1
-
-    # DEBUG: Drawing new piece
-    li   $v0, 4
-    la   $a0, msg_drawing_piece
-    syscall
 
     jal  draw_pc_main # redraws the piece 1 left
     j after_keyboard_handled # continue after key press
@@ -356,35 +334,10 @@ you_cant_move_left:
 	j after_keyboard_handled # do nothing and continue game
 
 d_was_pressed:
-    # DEBUG: D was pressed
-    li   $v0, 4
-    la   $a0, msg_key_pressed
-    syscall
-    lw $a0, 4($s6)          # load key code directly into $a0
-    li $v0, 11              # syscall 11 prints character in $a0
-    syscall
-    li $v0, 4
-    la $a0, newline
-    syscall
-
     addi $a2, $a2, 1             # increase x by 1 to move right, y is the same
     jal  check_hitting_wall     # check if we can't move the piece right
     addi $a2, $a2, -1
     bnez $v1, you_cant_move_right # if yes, do nothing and go back to game
-
-    # DEBUG: Erasing piece
-    li   $v0, 4
-    la   $a0, msg_erasing_piece
-    syscall
-    jal  erase_pc_main
-
-    addi $a2, $a2, 1
-
-    # DEBUG: Drawing new piece
-    li   $v0, 4
-    la   $a0, msg_drawing_piece
-    syscall
-
     jal  draw_pc_main # redraws the piece 1 right
     j after_keyboard_handled # continue after key press
 
@@ -505,15 +458,6 @@ trump_is_happy:
 
 # This function rotates a piece 90 degrees clockwise
 w_was_pressed:
-	li   $v0, 4
-    la   $a0, msg_key_pressed
-    syscall
-    lw $a0, 4($s6)          # load key code directly into $a0
-    li $v0, 11              # syscall 11 prints character in $a0
-    syscall
-    li $v0, 4
-    la $a0, newline
-    syscall
     # rotate the piece here
     jal check_if_opc
 	bnez $v0, after_keyboard_handled
@@ -607,15 +551,6 @@ rotate_piece_cw:
 
 # Tis function ratates a piece 90 degrees ccw
 s_was_pressed:
-	li   $v0, 4
-    la   $a0, msg_key_pressed
-    syscall
-    lw $a0, 4($s6)          # load key code directly into $a0
-    li $v0, 11              # syscall 11 prints character in $a0
-    syscall
-    li $v0, 4
-    la $a0, newline
-    syscall
     # rotate the piece here
     # if not o piece
     jal check_if_opc
@@ -737,6 +672,55 @@ check_if_opc:
 is_opiece:
     li $v0, 1
     jr $ra
+    
+# store a copy of the 4x4 grid one row below top of piece
+store_collision_grid:
+	la $s3, grid_below
+	addi $t1, $a3, 1 # go down a row
+	li $t2, 0 # row couner (0-3)
+	
+store_row_cg:
+	bge $t2, 4, storage_complete
+	li $t3, 0 # column counter (0-3)
+	li $t4, 0 # row bitmask
+	
+store_col_cg:
+	bge $t3, 4, store_mask # store bitmask to #s3
+	add $t5, $a2, $t3     # x + col
+    add $t6, $t1, $t2     # (y+1) + row
+    mul $t7, $t6, 16      # y * 16
+    add $t7, $t7, $t5     # + x
+    sll $t7, $t7, 2       # *4
+    add $t7, $s7, $t7     # Display address
+	# Check pixel (wall or other piece)
+    lw $t8, 0($t7)
+    lw $t9, WALL_CLR # if it's a wall -> collision
+    # chekc for non-piece and non-wall
+    beq $t8, $t9, set_bit
+    li $t9, 0x00333333    # Light checkerboard
+    beq $t8, $t9, next_col_cg
+    li $t9, 0x00222222    # Dark checkerboard
+    beq $t8, $t9, next_col_cg
+    # if we didnt branch above, its a piece-piece collision
+    
+set_bit:
+	li $t9, 1
+	sllv $t9, $t9, $t3
+	or $t4, $t4, $t9
+    
+ next_col_cg:
+ 	addi $t3, $t3, 1
+ 	j store_col_cg
+	
+store_mask:
+	sll $t5, $t2, 1
+	add $t6, $t0, $t5
+	sh $t4, 0($t6)
+	addi $t2, $t2, 1
+	j store_row_cg
+	
+storage_complete:
+	jr $ra
 
 after_keyboard_handled:
 	sw $zero, 0($s6) # reset the keyboard and go back to main loop
@@ -749,8 +733,8 @@ nap_time:
   
 done: # debugging only
 	# draw the game over screen
-	# clear the annoying ass corner
-	li $t0, 0x00000000       # black pixel
+	# clear the annoying corner
+	li $t0, 0x00000000 # black pixel
 
     # Row 0 (y = 0)
     sb $t0, 0($s7)
