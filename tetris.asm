@@ -302,11 +302,8 @@ sleep:
     jal nap_time            # sleep for 100ms 
     addiu $s5, $s5, 100
     blt $s5, 1000, game_loop  # skip gravity if wait time under 1000ms
-    #jal gravity 	# gravity the piece down
-    # check for piece-piece collisions in gravity funcyion
-    # check if a row is filled, delete the row and move everything down
-    li $s5, 0    # reset counter after 1 second
-    j game_loop
+    #j gravity 	# gravity the piece down
+    # gravity will hand control back to game_loop
 
 process_key:
     lw $a0, 4($s6)          # load key code
@@ -580,7 +577,6 @@ s_was_pressed:
 
 	j after_keyboard_handled # keep goin
 
-
 rotate_piece_ccw:
 	# $s0 points to current piece (in current_piece .space 8)
     # $s2 points to rotated data (in rotated_piece .space 8)
@@ -647,7 +643,6 @@ rotate_piece_ccw:
 
 # Input:  $s0 points to current piece (4 half-words)
 # Output: $v0 = 1 if O piece, else 0
-
 check_if_opc:
     lhu $t0, 0($s0)       # Row 0
     lhu $t1, 2($s0)       # Row 1
@@ -673,6 +668,26 @@ is_opiece:
     li $v0, 1
     jr $ra
     
+gravity:
+	# implements gravity
+	jal erase_pc_main # remove the piece from the board before storing
+	jal store_collision_grid    
+	jal check_for_collision # TODO
+	beqz $v0, no_boom_boom
+	jal draw_pc_main # put the piece back
+	li $s5, 0    # reset gravity counter
+	j game_loop # back to game
+  
+no_boom_boom:
+	addi $a3, $a3, 1
+	jal draw_pc_main # draw piece one row down
+	li $s5, 0    # reset gravity counter
+	j game_loop # back to game
+	
+check_for_collision:
+	j done
+	
+
 # store a copy of the 4x4 grid one row below top of piece
 store_collision_grid:
 	la $s3, grid_below
@@ -714,7 +729,7 @@ set_bit:
 	
 store_mask:
 	sll $t5, $t2, 1
-	add $t6, $t0, $t5
+	add $t6, $s3, $t5
 	sh $t4, 0($t6)
 	addi $t2, $t2, 1
 	j store_row_cg
