@@ -79,14 +79,14 @@ J: .half 0x0008, 0x000E, 0x0000, 0x0000   # J piece
 L: .half 0x0002, 0x000E, 0x0000, 0x0000   # L piece
 # I hate litle endian
 
-# Colors
-RED:   .word 0x00FF0000
-GREEN: .word 0x0000FF00
-DARK_BLUE:  .word 0x000000FF
-LITE_BLUE: .word 0x00ADD8E6
-PURPLE: .word 0x00800080
-ORANGE: .word 0x00FFA500
-YELLOW: .word 0x00FFFF00
+# Colors (hardcoded in random_bs_go because im too lazy to debug)
+#RED:   .word 0x00FF0000
+#GREEN: .word 0x0000FF00
+#DARK_BLUE:  .word 0x000000FF
+#LITE_BLUE: .word 0x00ADD8E6
+#PURPLE: .word 0x00800080
+#ORANGE: .word 0x00FFA500
+#YELLOW: .word 0x00FFFF00
 
 # Piece states for rotation
 current_piece: .space 8
@@ -230,14 +230,57 @@ random_bs_go:
     mul  $t4, $t1, $t3
     add  $s0, $t2, $t4         # $s0 = pointer to random piece
 
+    #––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+    # pick a random color by index in $t5, then load hex literal
     li   $v0, 42
     li   $a1, 777
     syscall
-    remu $t5, $a0, 7
-    la   $t6, RED
-    sll  $t7, $t5, 2
-    add  $t6, $t6, $t7
-    lw   $s1, 0($t6)           # $s1 = color
+    remu $t5, $a0, 7           # $t5 = 0…6
+
+    beqz  $t5, pick_red
+    li    $t6, 1
+    beq   $t5, $t6, pick_green
+    li    $t6, 2
+    beq   $t5, $t6, pick_blue
+    li    $t6, 3
+    beq   $t5, $t6, pick_lite_blue
+    li    $t6, 4
+    beq   $t5, $t6, pick_purple
+    li    $t6, 5
+    beq   $t5, $t6, pick_orange
+    # else t5 == 6
+    j     pick_yellow
+
+pick_red:
+    li   $s1, 0x00FF0000   # RED
+    j    pick_done
+
+pick_green:
+    li   $s1, 0x0000FF00   # GREEN
+    j    pick_done
+
+pick_blue:
+    li   $s1, 0x000000FF   # DARK_BLUE
+    j    pick_done
+
+pick_lite_blue:
+    li   $s1, 0x00ADD8E6   # LITE_BLUE
+    j    pick_done
+
+pick_purple:
+    li   $s1, 0x00800080   # PURPLE
+    j    pick_done
+
+pick_orange:
+    li   $s1, 0x00FFA500   # ORANGE
+    j    pick_done
+
+pick_yellow:
+    li   $s1, 0x00FFFF00   # YELLOW
+
+pick_done:
+    # $s1 now holds your hard‑coded color
+    #––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 
     # Copy selected piece into current_piece buffer
     la   $t0, current_piece
@@ -985,24 +1028,24 @@ game_over_yay:
     li $a2, 0           # initial x position
     li $a3, 8           # initial y position
     # Draw letter G
-    la $t0, RED
+    li $t0, 0x00FF0000 # red color
     lw $s1, 0($t0)  
     la $s0, g_piece     # load G piece data
     jal gmovr_draw_pc_main
     # Draw letter A
-    la $t0, ORANGE
+    li $t0, 0x00FFA500 # orange color
     lw $s1, 0($t0)  
     addi $a2, $a2, 4
     la $s0, a_piece
     jal gmovr_draw_pc_main
     # Draw letter M
-    la $t0, YELLOW
+    li $t0, 0x00FFFF00 # yellow color
     lw $s1, 0($t0)  
     addi $a2, $a2, 4
     la $s0, m_piece
     jal gmovr_draw_pc_main
     # Draw letter E
-    la $t0, GREEN
+    li $t0, 0x0000FF00 # green
     lw $s1, 0($t0)  
     addi $a2, $a2, 4
     la $s0, e_piece
@@ -1011,25 +1054,25 @@ game_over_yay:
     # next line
     addi $a3, $a3, 7
     # Draw letter O
-    la $t0, LITE_BLUE
+    li $t0, 0x00ADD8E6 # light BLUE
     lw $s1, 0($t0)  
     addi $a2, $a2, 4
     la $s0, o_piece
     jal gmovr_draw_pc_main
     # Draw letter V
-    la $t0, DARK_BLUE
+    li $t0, 0x000000FF # blue
     lw $s1, 0($t0)  
     addi $a2, $a2, 4
     la $s0, v_piece
     jal gmovr_draw_pc_main
     # Draw letter E
-    la $t0, PURPLE
+    li $t0, 0x00800080 # pyrple
     lw $s1, 0($t0)  
     addi $a2, $a2, 4
     la $s0, e_piece
     jal gmovr_draw_pc_main
     # Draw letter R
-    la $t0, RED
+    li $t0, 0x00FF0000
     lw $s1, 0($t0)  
     addi $a2, $a2, 4
     la $s0, r_piece
