@@ -11,8 +11,9 @@
 # Which milestones have been reached in this submission?
 # (See the assignment handout for descriptions of the milestones)
 # - Milestone 1/2/3/4/5 (choose the one the applies)
-# - Milestone 1 reached: 7/21
-# - Milestone 2 reached: ??
+# - Milestone 1: Drew the three walls and a checkboard grid, spawns initial tetromino
+# - Milestone 2: player is able to quit the game and movement + screen updates work, need to allow space bar to drop
+# - Milestone 3: only wall collision detection implemented
 #
 # Which approved features have been implemented?
 # (See the assignment handout for the list of features)
@@ -93,8 +94,10 @@ YELLOW: .word 0x00FFFF00
 # Piece states for rotation
 current_piece: .space 8
 rotated_piece: .space 8
-grid_below: .space 8 # contains the 4x4 grid under the piece
-# ^ only used when checking gravity, stays zeroed all other times
+grid_below: .space 8 # contains the 4x4 grid one unit under the piece
+grid_left: .space 8 # containes the 4x4 grid one unit to the left
+grid_right: .space 8 # contains the 4x4 grid one unit to the right
+# used for collision checks and reset after
 
 # game over bozo
 g_piece: .half 0x000F, 0x0008, 0x0008, 0x0009, 0x0009, 0x000F
@@ -112,6 +115,8 @@ r_piece: .half 0x000E, 0x0009, 0x000E, 0x000C, 0x000A, 0x0009
 # S7 is the DISPLAY
 # S6 is the keyboard
 # S5 is the gravity counter
+# S4 stores the grid to the left OR right
+# S3 stores the grid below
 # S2 will store the rotated piece
 # S1 stores the piece color
 # S0 is the pointer to the piece
@@ -127,6 +132,7 @@ main:
     lw   $s7, 0($t0)         # Load 0x10008000 into $s7
     la $s6, ADDR_KBRD       # Load address of keyboard control
     lw $s6, 0($s6)          # Get actual memory address
+    la $s3, grid_below    # store base address of grid_below buffer
     # Draw checkerboard
     jal  draw_checkerboard  
     # Draw the three wals
@@ -151,14 +157,12 @@ y_loop:
 x_loop:
     # Calculate checkerboard pattern (x + y) % 2
     add  $t2, $t1, $t0
-    andi $t2, $t2, 1
-    
+    andi $t2, $t2, 1   
     # Calculate address: $s7 + (y*64 + x*4)
     sll  $t3, $t0, 6         # y * 64 (16 units/row * 4 bytes/unit)
     sll  $t4, $t1, 2         # x * 4
     add  $t5, $t3, $t4       # offset
     add  $t6, $s7, $t5       # Final address ($s7 + offset)
-    
     # Set colors
     beqz $t2, dark_unit
     li   $t7, 0x00333333     # Light gray
@@ -168,23 +172,20 @@ dark_unit:
     li   $t7, 0x00222222     # Dark gray
     
 store_color:
-    sw   $t7, 0($t6)         # Store color to display memory
-    
+    sw   $t7, 0($t6)         # Store color to display memory    
     # Increment x
     addi $t1, $t1, 1
     blt  $t1, 16, x_loop     # 16 units across (128/8)
-    
     # Increment y
     addi $t0, $t0, 1
-    blt  $t0, 32, y_loop     # 32 units down (256/8)
-    
+    blt  $t0, 32, y_loop     # 32 units down (256/8)  
     jr   $ra                 # Return to caller
 
 build_a_wall:
     lw   $t1, WALL_CLR
-
     li   $t2, 0 # y = 0
     li   $t3, 0  # x = 0 
+    
 draw_left_wall:
     mul  $t4, $t2, 16
     add  $t4, $t4, $t3
@@ -197,6 +198,7 @@ draw_left_wall:
 
     li   $t2, 0
     li   $t3, 15
+    
 draw_right_wall:
     mul  $t4, $t2, 16
     add  $t4, $t4, $t3
@@ -206,9 +208,9 @@ draw_right_wall:
     addi $t2, $t2, 1
     li   $t6, 32
     blt  $t2, $t6, draw_right_wall
-
     li   $t2, 31
     li   $t3, 0
+    
 draw_bottom_wall:
     mul  $t4, $t2, 16
     add  $t4, $t4, $t3
@@ -218,7 +220,7 @@ draw_bottom_wall:
     addi $t3, $t3, 1
     li   $t6, 16
     blt  $t3, $t6, draw_bottom_wall
-	jr $ra #should go here
+	jr $ra 
 	
 # loads a random piece and color and stores the piece in current_piece
 random_bs_go:
@@ -309,15 +311,13 @@ sleep:
     jal nap_time            # sleep for 100ms 
     addiu $s5, $s5, 100
     blt $s5, 2000, game_loop  # skip gravity if wait time under 1900ms 
-    li $v0, 4
-    la $a0, msg_gravity
-    syscall
     #j gravity 	# gravity the piece down
     # gravity will hand control back to game_loop
     j game_loop
 
 process_key:
     lw $a0, 4($s6)          # load key code
+    beq $a0, 0x20, hard_drop # spacebar pressed
     beq $a0, 0x61, a_was_pressed   # 'a' pressed
     beq $a0, 0x64, d_was_pressed   # 'd' pressed
     beq $a0, 0x73, s_was_pressed   # 's' pressed
@@ -682,6 +682,76 @@ is_opiece:
     li $v0, 1
     jr $ra
 
+hard_drop:
+	# drops a piece to the bottom of the playing board
+	# our first step is to store the 4x4 grid immediately below the 4x4 grid to check for collisions
+	jal erase_pc_main # avoid self-collisions
+	jal get_grid_below
+	jal print_grid_below
+	jal draw_pc_main
+	j after_keyboard_handled
+	
+#   Inputs: $a2 = piece X, $a3 = piece Y
+#   Output: grid_below[0..3] = bitmasks of occupied cells one unit below each piece row
+get_grid_below:
+    move $t0, $s3     # ptr to grid_below buffer
+    li   $t1, 0              # i = 0
+
+gb_row_loop:
+    beq  $t1, 4, gb_done
+    # Compute the screen‐Y of the row below piece‐row i
+    addi $t5, $a3, 1
+    add  $t5, $t5, $t1      # t5 = a3 + i + 1
+
+    # If that Y >= bottom (31), just mark full occupancy and skip cols
+    li   $t6, 31
+    bge  $t5, $t6, gb_full_row
+
+    # else scan columns
+    li   $t3, 0             # accumulator for this row
+    li   $t2, 0             # j = 0
+
+gb_col_loop:
+    beq  $t2, 4, gb_store_row
+    # screen X = a2 + j
+    add  $t4, $a2, $t2
+    # compute addr = s7 + ((t5*16 + t4) * 4)
+    mul  $t7, $t5, 16
+    add  $t7, $t7, $t4
+    sll  $t7, $t7, 2
+    add  $t8, $s7, $t7
+    lw   $t9, 0($t8)
+    # if non‑checkerboard (not dark 0x00222222, not light 0x00333333)
+    li   $t6, 0x00222222
+    beq  $t9, $t6, gb_next_col
+    li   $t6, 0x00333333
+    beq  $t9, $t6, gb_next_col
+    beqz $t9, gb_next_col
+
+    # set bit (3‑j)
+    li   $t6, 3
+    sub  $t6, $t6, $t2
+    li   $t7, 1
+    sllv $t7, $t7, $t6
+    or   $t3, $t3, $t7
+
+gb_next_col:
+    addi $t2, $t2, 1
+    j    gb_col_loop
+
+gb_full_row:
+    li   $t3, 0x000F        # all 4 bits set
+
+gb_store_row:
+    sh   $t3, 0($t0)
+    addi $t0, $t0, 2
+    addi $t1, $t1, 1
+    j    gb_row_loop
+
+gb_done:
+    jr   $ra
+
+# FINAL FUNCTIONS: MUST GO AT BOTTOM!
 after_keyboard_handled:
 	sw $zero, 0($s6) # reset the keyboard and go back to main loop
     j game_loop
@@ -910,3 +980,47 @@ game_over_yay:
     # Exit program
     li $v0, 10
     syscall
+    
+ # DEBUG PRINTS THAT ARE WILL BE REMOVED LATER
+ print_grid_below:
+    la   $t0, grid_below     # pointer to grid_below
+    li   $t1, 0              # row index
+
+pgrid_loop:
+    beq  $t1, 4, pgrid_done
+
+    lhu  $t2, 0($t0)         # load halfword row
+    li   $t3, 3              # bit index (3 to 0)
+
+print_bits:
+    bltz $t3, pgrid_newline
+
+    li   $t4, 1
+    sllv $t4, $t4, $t3       # create mask = 1 << t3
+    and  $t5, $t2, $t4       # check if bit is set
+
+    li   $v0, 11             # syscall: print_char
+    beqz $t5, print_zero
+    li   $a0, '1'
+    syscall
+    j print_next_bit
+
+print_zero:
+    li   $a0, '0'
+    syscall
+
+print_next_bit:
+    subi $t3, $t3, 1
+    j print_bits
+
+pgrid_newline:
+    li   $v0, 4
+    la   $a0, newline
+    syscall
+
+    addi $t0, $t0, 2         # next halfword
+    addi $t1, $t1, 1
+    j pgrid_loop
+
+pgrid_done:
+    jr $ra
