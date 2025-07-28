@@ -1215,7 +1215,7 @@ piece_died:
 washing_machine:
 	# plays main melody from die forelle (the trout)
 	li $v0, 33
-	li $a2, 0 # for piano
+	li $a2, 0 # for piano, this sounds the best
 	li $a3, 100 # full volume
 	li $a0, Eflat4
 	li $a1, 312 # duration in ms
@@ -1280,6 +1280,107 @@ washing_machine:
 	syscall
 	li $a0 Eflat4
 	li $a1 937
+	syscall
+	# third part of melody
+	li $a0 Eflat4
+	li $a1 312
+	syscall
+	li $a0 G4
+	syscall
+	syscall
+	li $a0 Aflat4
+	li $a1 156
+	syscall
+	li $a0 G4
+	syscall
+	li $a0 F4
+	syscall
+	li $a0 G4
+	syscall
+	li $a0 Aflat4
+	li $a1 625
+	syscall
+	li $a0 Eflat4
+	li $a1 312 
+	syscall
+	li $a0 Aflat4
+	syscall
+	li $a0 G4
+	syscall
+	syscall
+	li $a1 156
+	syscall
+	li $a0 Dflat5
+	syscall
+	li $a0 Bflat4
+	syscall
+	li $a0 G4
+	syscall
+	li $a0 Aflat4
+	li $a1 937
+	syscall 
+	# fifth part of melody
+	li $a1 312
+	syscall
+	li $a0 F4
+	syscall
+	syscall
+	syscall
+	li $a0 Aflat4
+	syscall
+	li $a1 625
+	syscall
+	li $a0 Eflat4
+	li $a1 312
+	syscall
+	syscall
+	li $a1 469
+	syscall
+	li $a1 156
+	syscall
+	li $a1 312
+	li $a0 Bflat4
+	syscall
+	li $a0 G4
+	syscall
+	li $a0 Aflat4
+	li $a1 937
+	syscall
+	li $a1 312
+	syscall
+	li $a1 156
+	syscall
+	li $a0 G4
+	syscall
+	li $a1 312
+	li $a0 F4
+	syscall
+	li $a1 156
+	syscall
+	li $a0 Aflat4
+	syscall
+	li $a0 G4
+	syscall
+	li $a0 Bflat4
+	syscall
+	li $a0 Aflat4
+	li $a1 625
+	syscall
+	li $a0 Eflat4
+	li $a1 312
+	syscall
+	syscall
+	li $a1 469
+	syscall
+	li $a1 156
+	syscall
+	li $a1 312
+	li $a0 Bflat4
+	syscall
+	li $a0 G4
+	syscall
+	li $a0 Aflat4
+	li $a1 1250
 	syscall
 	jr $ra
 	
