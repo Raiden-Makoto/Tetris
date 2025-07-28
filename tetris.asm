@@ -106,6 +106,16 @@ o_piece: .half 0x000F, 0x0009, 0x0009, 0x0009, 0x0009, 0x000F
 v_piece: .half 0x0009, 0x0009, 0x0009, 0x0009, 0x0006, 0x0006
 r_piece: .half 0x000E, 0x0009, 0x000E, 0x000C, 0x000A, 0x0009
 
+# Random ass notes
+.eqv Eflat5 75
+.eqv Dflat5 73
+.eqv C5 72
+.eqv Bflat4 70
+.eqv Aflat4 68
+.eqv G4 67
+.eqv F4 65
+.eqv Eflat4 63
+.eqv D4 62
 
 ##############################################################################
 # Mutable Data
@@ -1116,7 +1126,8 @@ game_over_yay:
     addi $a2, $a2, 4
     la $s0, r_piece
     jal gmovr_draw_pc_main
-    
+    # play davids washing machine song
+    jal washing_machine
     # Exit program
     li $v0, 10
     syscall
@@ -1199,3 +1210,76 @@ piece_died:
 	li $a0, 144
 	jal nap_time
 	j done
+	
+	
+washing_machine:
+	# plays main melody from die forelle (the trout)
+	li $v0, 33
+	li $a2, 0 # for piano
+	li $a3, 100 # full volume
+	li $a0, Eflat4
+	li $a1, 312 # duration in ms
+	syscall 
+	li $a0, Aflat4
+	syscall
+	syscall
+	li $a0 C5
+	syscall
+	syscall
+	li $a0 Aflat4
+	li $a1 625 # quarter note
+	syscall
+	li $a0, Eflat4
+	li $a1, 312 # eight note
+	syscall
+	syscall
+	li $a1, 469 # dotted 8th
+	syscall
+	li $a1 156
+	syscall
+	li $a0 Bflat4
+	syscall
+	li $a0 Aflat4
+	syscall
+	li $a0 G4
+	syscall
+	li $a0 F4
+	syscall
+	li $a0 Eflat4
+	li $a1 937
+	syscall
+	# second part of melody
+	li $a0, Eflat4
+	li $a1, 312 # duration in ms
+	syscall 
+	li $a0, Aflat4
+	syscall
+	syscall
+	li $a0 C5
+	syscall
+	syscall
+	li $a0 Aflat4
+	li $a1 625 # quarter note
+	syscall
+	li $a0 Eflat4
+	li $a1 312
+	syscall
+	li $a0 Aflat4
+	syscall
+	li $a0 G4
+	syscall
+	li $a0 F4
+	li $a1 156 # sixteenth note
+	syscall
+	li $a0 G4
+	syscall
+	li $a0 Aflat4
+	li $a1 312
+	syscall
+	li $a0 D4
+	syscall
+	li $a0 Eflat4
+	li $a1 937
+	syscall
+	jr $ra
+	
