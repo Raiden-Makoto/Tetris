@@ -753,7 +753,7 @@ hd_collision:
 
     # get a new random piece and reset x,y
     jal check_top2rows_empty
-    bnez $v1, done # end the game, we can't spawn
+    bnez $v1, piece_died # end the game, we can't spawn
     # otherwise we can spawn the piece
     li $a2, 6
     li $a3, 0
@@ -1192,9 +1192,10 @@ print_coords:
 pgrid_done:
     jr $ra
     
-    
 piece_died:
 	li $v0, 4
 	la $a0, msg_spawn_failed
 	syscall
+	li $a0, 144
+	jal nap_time
 	j done
