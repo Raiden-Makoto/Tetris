@@ -54,11 +54,8 @@ msg_wall_safe: .asciiz "ice has deported the illegals\n"
 msg_game_over: .asciiz "Ur kinda bad at ts game\n"
 msg_lock_piece :.asciiz "Get locked up nigga\n"
 msg_gravity: .asciiz "Moving piece down\n"
-msg_wallcheck: .asciiz "Checking if piece will hit wall\n"
-msg_pcpc: .asciiz "Checking for piece-piece collision\n"
-msg_storage_complete: .asciiz "Collision Grid storage complete\n"
-msg_cc_done: .asciiz "Collision check between pieces complete\n"
-msg_wtfhappen: .asciiz "What the fuck happened\n"
+msg_a2: .asciiz "a2="
+msg_a3: .asciiz "a3="
 
 ##############################################################################
 # Immutable Data
@@ -128,8 +125,8 @@ r_piece: .half 0x000E, 0x0009, 0x000E, 0x000C, 0x000A, 0x0009
 
 		# Run the Tetris game.
 main:
-    la   $t0, ADDR_DSPL      # Load address of ADDR_DSPL
-    lw   $s7, 0($t0)         # Load 0x10008000 into $s7
+    la $t0, ADDR_DSPL      # Load address of ADDR_DSPL
+    lw $s7, 0($t0)         # Load 0x10008000 into $s7
     la $s6, ADDR_KBRD       # Load address of keyboard control
     lw $s6, 0($s6)          # Get actual memory address
     la $s3, grid_below    # store base address of grid_below buffer
@@ -683,13 +680,66 @@ is_opiece:
     jr $ra
 
 hard_drop:
-	# drops a piece to the bottom of the playing board
-	# our first step is to store the 4x4 grid immediately below the 4x4 grid to check for collisions
-	jal erase_pc_main # avoid self-collisions
-	jal get_grid_below
-	jal print_grid_below
-	jal draw_pc_main
-	j after_keyboard_handled
+    jal erase_pc_main       # remove piece from screen
+    j hd_loop
+
+hd_loop:
+	li $v1, 0
+    jal get_grid_below      # fill grid_below with cells below the piece
+    jal check_downward_collision
+    jal clear_grid_below    # reset buffer for next iteration
+    jal print_coords
+    bnez $v1, hd_collision  # if collision detected, stop
+
+    # No collision → move piece down by one
+    addi $a3, $a3, 1
+    j hd_loop               # keep dropping
+
+hd_collision:
+    addi $a3, $a3, -1       # back up one row
+    jal draw_pc_main        # draw permanently at final position
+
+    # small pause before spawning next piece
+    li $a0, 989
+    jal nap_time
+
+    # get a new random piece and reset x,y
+    jal random_bs_go
+    li $v0, 4
+    la $a0, msg_drawing_piece
+    syscall
+    jal draw_pc_main
+    j after_keyboard_handled
+
+
+check_downward_collision:
+	li $v1, 0
+	
+	lhu $t0, 0($s0)        # piece row 0
+	lhu $t1, 2($s0)        # piece row 1
+	lhu $t2, 4($s0)        # piece row 2
+	lhu $t3, 6($s0)        # piece row 3
+
+	lhu $t4, 0($s3)        # grid_below row 0
+	lhu $t5, 2($s3)        # grid_below row 1
+	lhu $t6, 4($s3)        # grid_below row 2
+	lhu $t7, 6($s3)        # grid_below row 3
+
+	and $t8, $t0, $t4      # check row 0
+	and $t9, $t1, $t5      # check row 1
+	or  $t8, $t8, $t9
+	and $t9, $t2, $t6      # check row 2
+	or  $t8, $t8, $t9
+	and $t9, $t3, $t7      # check row 3
+	or  $t8, $t8, $t9
+
+	beqz $t8, nothing_below
+	li $v1, 1              # collision detected
+	jr $ra
+
+nothing_below:
+	li $v1, 0
+	jr $ra
 	
 #   Inputs: $a2 = piece X, $a3 = piece Y
 #   Output: grid_below[0..3] = bitmasks of occupied cells one unit below each piece row
@@ -702,11 +752,9 @@ gb_row_loop:
     # Compute the screen‐Y of the row below piece‐row i
     addi $t5, $a3, 1
     add  $t5, $t5, $t1      # t5 = a3 + i + 1
-
     # If that Y >= bottom (31), just mark full occupancy and skip cols
     li   $t6, 31
     bge  $t5, $t6, gb_full_row
-
     # else scan columns
     li   $t3, 0             # accumulator for this row
     li   $t2, 0             # j = 0
@@ -727,7 +775,6 @@ gb_col_loop:
     li   $t6, 0x00333333
     beq  $t9, $t6, gb_next_col
     beqz $t9, gb_next_col
-
     # set bit (3‑j)
     li   $t6, 3
     sub  $t6, $t6, $t2
@@ -750,6 +797,14 @@ gb_store_row:
 
 gb_done:
     jr   $ra
+    
+clear_grid_below:
+    la   $t0, grid_below
+    sh   $zero, 0($t0)
+    sh   $zero, 2($t0)
+    sh   $zero, 4($t0)
+    sh   $zero, 6($t0)
+    jr $ra
 
 # FINAL FUNCTIONS: MUST GO AT BOTTOM!
 after_keyboard_handled:
@@ -1021,6 +1076,33 @@ pgrid_newline:
     addi $t0, $t0, 2         # next halfword
     addi $t1, $t1, 1
     j pgrid_loop
+    
+    
+# PRINTS THE COORDINATES X,Y IN A2, A3
+print_coords:
+    li   $v0, 4
+    la   $a0, msg_a2
+    syscall
+    move $a0, $a2
+    li   $v0, 1
+    syscall
+
+    li   $v0, 4
+    la   $a0, comma
+    syscall
+
+    li   $v0, 4
+    la   $a0, msg_a3
+    syscall
+    move $a0, $a3
+    li   $v0, 1
+    syscall
+
+    li   $v0, 4
+    la   $a0, newline
+    syscall
+    jr   $ra
+
 
 pgrid_done:
     jr $ra
