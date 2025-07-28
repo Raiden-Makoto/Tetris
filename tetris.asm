@@ -56,6 +56,7 @@ msg_lock_piece :.asciiz "Get locked up nigga\n"
 msg_gravity: .asciiz "Moving piece down\n"
 msg_a2: .asciiz "a2="
 msg_a3: .asciiz "a3="
+msg_spawn_failed: .asciiz "Failed to spawn piece. Ending game\n"
 
 ##############################################################################
 # Immutable Data
@@ -125,23 +126,24 @@ r_piece: .half 0x000E, 0x0009, 0x000E, 0x000C, 0x000A, 0x0009
 
 		# Run the Tetris game.
 main:
-    la $t0, ADDR_DSPL      # Load address of ADDR_DSPL
-    lw $s7, 0($t0)         # Load 0x10008000 into $s7
-    la $s6, ADDR_KBRD       # Load address of keyboard control
-    lw $s6, 0($s6)          # Get actual memory address
-    la $s3, grid_below    # store base address of grid_below buffer
-    # Draw checkerboard
-    jal  draw_checkerboard  
-    # Draw the three wals
-    jal build_a_wall
-    # Continue with the game
+    # initialize display, keyboard, and grid_below base
+    la   $t0, ADDR_DSPL
+    lw   $s7, 0($t0)
+    la   $s6, ADDR_KBRD
+    lw   $s6, 0($s6)
+    la   $s3, grid_below
+
+    # draw background and walls
+    jal  draw_checkerboard
+    jal  build_a_wall
+
+    # “Game Starting” message
     li   $v0, 4
     la   $a0, msg_game_starting
     syscall
-    # load random color and piece and draw it
+    
     jal random_bs_go
     jal draw_pc_main
-    # loop until the player loses
     j game_loop
 
 draw_checkerboard:
@@ -731,7 +733,7 @@ hd_loop:
     jal get_grid_below      # fill grid_below with cells below the piece
     jal check_downward_collision
     jal clear_grid_below    # reset buffer for next iteration
-    jal print_coords
+    #jal print_coords
     bnez $v1, hd_collision  # if collision detected, stop
 
     # No collision → move piece down by one
@@ -746,16 +748,58 @@ hd_collision:
     jal draw_pc_main        # draw permanently at final position
 
     # small pause before spawning next piece
-    li $a0, 989
+    li $a0, 349
     jal nap_time
 
     # get a new random piece and reset x,y
+    jal check_top2rows_empty
+    bnez $v1, done # end the game, we can't spawn
+    # otherwise we can spawn the piece
+    li $a2, 6
+    li $a3, 0
     jal random_bs_go
-    li $v0, 4
-    la $a0, msg_drawing_piece
-    syscall
     jal draw_pc_main
     j after_keyboard_handled
+
+# check_top_two_rows_empty
+# Sets v1=1 and returns if any pixel in y=0 or y=1 is not checkerboard;
+# else v1=0.
+check_top2rows_empty:
+    li   $v1, 0        # assume clear
+    li   $t0, 0        # col = 0
+
+scan_cols:
+    bge  $t0, 16, top2rows_clear # done after col 16
+
+    # compute base offset = (row*16 + col)*4
+    # first check row 0
+    sll  $t1, $t0, 2   # t1 = col*4
+    add  $t2, $s7, $t1 # addr = s7 + t1
+    lw   $t3, 0($t2)
+    li   $t4, 0x00222222
+    beq  $t3, $t4, chk_row1
+    li   $t4, 0x00333333
+    beq  $t3, $t4, chk_row1
+    li   $v1, 1
+    jr   $ra
+
+chk_row1:
+    addi $t1, $t1, 64  # move down one row = + (16*4)
+    add  $t2, $s7, $t1
+    lw   $t3, 0($t2)
+    li   $t4, 0x00222222
+    beq  $t3, $t4, next_col
+    li   $t4, 0x00333333
+    beq  $t3, $t4, next_col
+    li   $v1, 1
+    jr   $ra
+
+next_col:
+    addi $t0, $t0, 1
+    j    scan_cols
+
+top2rows_clear:
+    jr   $ra
 
 
 check_downward_collision:
@@ -864,6 +908,9 @@ nap_time:
   
 done:
 	# draw the game over screen
+	li $v0, 4
+	la $a0, msg_game_over
+	syscall
 	# clear the annoying corner
 	li $t0, 0x00000000 # black pixel
 
@@ -1028,25 +1075,21 @@ game_over_yay:
     li $a2, 0           # initial x position
     li $a3, 8           # initial y position
     # Draw letter G
-    li $t0, 0x00FF0000 # red color
-    lw $s1, 0($t0)  
+    li $s1, 0x00FF0000 # red color
     la $s0, g_piece     # load G piece data
     jal gmovr_draw_pc_main
     # Draw letter A
-    li $t0, 0x00FFA500 # orange color
-    lw $s1, 0($t0)  
+    li $s1, 0x00FFA500 # orange color
     addi $a2, $a2, 4
     la $s0, a_piece
     jal gmovr_draw_pc_main
     # Draw letter M
-    li $t0, 0x00FFFF00 # yellow color
-    lw $s1, 0($t0)  
+    li $s1, 0x00FFFF00 # yellow color
     addi $a2, $a2, 4
     la $s0, m_piece
     jal gmovr_draw_pc_main
     # Draw letter E
-    li $t0, 0x0000FF00 # green
-    lw $s1, 0($t0)  
+    li $s1, 0x0000FF00 # green
     addi $a2, $a2, 4
     la $s0, e_piece
     jal gmovr_draw_pc_main
@@ -1054,26 +1097,22 @@ game_over_yay:
     # next line
     addi $a3, $a3, 7
     # Draw letter O
-    li $t0, 0x00ADD8E6 # light BLUE
-    lw $s1, 0($t0)  
+    li $s1, 0x00ADD8E6 # light BLUE
     addi $a2, $a2, 4
     la $s0, o_piece
     jal gmovr_draw_pc_main
     # Draw letter V
-    li $t0, 0x000000FF # blue
-    lw $s1, 0($t0)  
+    li $s1, 0x000000FF # blue
     addi $a2, $a2, 4
     la $s0, v_piece
     jal gmovr_draw_pc_main
     # Draw letter E
-    li $t0, 0x00800080 # pyrple
-    lw $s1, 0($t0)  
+    li $s1, 0x00800080 # pyrple  
     addi $a2, $a2, 4
     la $s0, e_piece
     jal gmovr_draw_pc_main
     # Draw letter R
-    li $t0, 0x00FF0000
-    lw $s1, 0($t0)  
+    li $s1, 0x00FF0000
     addi $a2, $a2, 4
     la $s0, r_piece
     jal gmovr_draw_pc_main
@@ -1152,3 +1191,10 @@ print_coords:
 
 pgrid_done:
     jr $ra
+    
+    
+piece_died:
+	li $v0, 4
+	la $a0, msg_spawn_failed
+	syscall
+	j done
