@@ -696,7 +696,10 @@ hd_loop:
     j hd_loop               # keep dropping
 
 hd_collision:
-    addi $a3, $a3, -1       # back up one row
+    #addi $a3, $a3, -1       # comment this out because:
+    # when we check for collisions, we check if we can move the piece down one row
+    # if we can't, we need to lock the piece where it is currently
+    # subtracting 1 from y will make it go up a row, which is bad
     jal draw_pc_main        # draw permanently at final position
 
     # small pause before spawning next piece
