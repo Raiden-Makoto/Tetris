@@ -12,18 +12,21 @@
 # (See the assignment handout for descriptions of the milestones)
 # - Milestone 1/2/3/4/5 (choose the one the applies)
 # - Milestone 1: Drew the three walls and a checkboard grid, spawns initial tetromino
-# - Milestone 2: player is able to quit the game and movement + screen updates work, need to allow space bar to drop
-# - Milestone 3: only wall collision detection implemented
+# - Milestone 2: Movement (left, right, rotation and drop) added
+# - Milestone 3: only wall and downward collision detection implemented
+# - TODO-stone: implement left and right collision, row clearing
 #
 # Which approved features have been implemented?
 # (See the assignment handout for the list of features)
 # Easy Features:
-# 1. (fill in the feature, if any)
-# 2. (fill in the feature, if any)
-# ... (add more if necessary)
+# 1. Add sound effects for game intro, game over, hard drop and clearing row
+# 2. Added game over screen
+#	TODO: press R to restart the game
+# 3. Gravity (TODO)
+# 4. 
 # Hard Features:
-# 1. (fill in the feature, if any)
-# 2. (fill in the feature, if any)
+# 1. Implement full set of tetrominoes
+# 2. Wall kick feature (TODO)
 # ... (add more if necessary)
 # How to play:
 # Make a reasonable assumption
@@ -109,17 +112,24 @@ r_piece: .half 0x000E, 0x0009, 0x000E, 0x000C, 0x000A, 0x0009
 # Random ass notes
 .eqv F6 89
 .eqv Csharp6 85
+.eqv Bflat5 82
 .eqv Gsharp5 80
+.eqv G5 79
 .eqv Fsharp5 78
+.eqv F5 77
 .eqv Eflat5 75
+.eqv D5 74
 .eqv Dflat5 73
 .eqv C5 72
+.eqv B4 71
 .eqv Bflat4 70
 .eqv Aflat4 68
 .eqv G4 67
+.eqv Fsharp4 66
 .eqv F4 65
 .eqv Eflat4 63
 .eqv D4 62
+.eqv Fsharp3 54
 
 ##############################################################################
 # Mutable Data
@@ -773,6 +783,7 @@ hd_collision:
     jal check_top2rows_empty
     bnez $v1, piece_died # end the game, we can't spawn
     # otherwise we can spawn the piece
+    jal mac_startup_sound # play this every time a piece hard drops
     li $a2, 6
     li $a3, 0
     jal random_bs_go
@@ -1238,8 +1249,59 @@ play_starting_sound:
 	li $a0 F6
 	syscall
 	jr $ra
-				
+
+mac_startup_sound:
+	# a piece hard dropped
+	li $v0, 31
+	li $a2, 0 # piano is goated
+	li $a3, 100 # full volume
+	li $a1 349 # duration
+	li $a0 Fsharp3
+	syscall
+	li $a0 Fsharp4
+	syscall
+	li $a0 Bflat4
+	syscall
+	li $a0 Dflat5
+	syscall
+	jr $ra
+	
+mario_lvlup:
+	# play this sound for every row cleared
+	# G maj arpeg then Aflat then Bflat
+	li $v0, 33
+	li $a2, 0 # piano is W
+	li $a3, 100 # max volume
+	li $a1, 88 # rapid arpeggios
+	li $a0, G4
+	syscall
+	li $a0, B4
+	syscall
+	li $a0, D5
+	syscall
+	li $a0, G5
+	syscall
+	li $a0, Aflat4
+	syscall
+	li $a0, C5
+	syscall
+	li $a0, Eflat5
+	syscall
+	li $a0, Gsharp5
+	syscall
+	li $a0, Bflat4
+	syscall 
+	li $a0, D5
+	syscall
+	li $a0, F5
+	syscall
+	li $a0, Bflat5
+	syscall
+	jr $ra # remember to reset a2 and a3
+	
+							
 washing_machine:
+	# ending theme
 	# plays main melody from die forelle (the trout)
 	li $v0, 33
 	li $a2, 0 # for piano, this sounds the best
