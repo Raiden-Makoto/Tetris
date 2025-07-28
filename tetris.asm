@@ -107,6 +107,10 @@ v_piece: .half 0x0009, 0x0009, 0x0009, 0x0009, 0x0006, 0x0006
 r_piece: .half 0x000E, 0x0009, 0x000E, 0x000C, 0x000A, 0x0009
 
 # Random ass notes
+.eqv F6 89
+.eqv Csharp6 85
+.eqv Gsharp5 80
+.eqv Fsharp5 78
 .eqv Eflat5 75
 .eqv Dflat5 73
 .eqv C5 72
@@ -151,6 +155,10 @@ main:
     li   $v0, 4
     la   $a0, msg_game_starting
     syscall
+    
+    jal play_starting_sound # start up music (def not cr intro)
+    li $a2, 6
+    li $a3, 0 # reset these for piece spawn
     
     jal random_bs_go
     jal draw_pc_main
@@ -1211,7 +1219,26 @@ piece_died:
 	jal nap_time
 	j done
 	
-	
+
+# SONUND EFFECTS/MUSIC
+play_starting_sound:
+	# plays CR intro chord
+	li $v0, 33
+	li $a2, 0
+	li $a3, 100 # max volume
+	li $a0 Dflat5
+	li $a1 96
+	syscall
+	li $a0 Fsharp5
+	syscall
+	li $a0 Gsharp5
+	syscall
+	li $a0 Csharp6
+	syscall
+	li $a0 F6
+	syscall
+	jr $ra
+				
 washing_machine:
 	# plays main melody from die forelle (the trout)
 	li $v0, 33
