@@ -766,10 +766,10 @@ hd_collision:
 # else v1=0.
 check_top2rows_empty:
     li   $v1, 0        # assume clear
-    li   $t0, 0        # col = 0
+    li   $t0, 6        # col = 6 # we start spawning here
 
 scan_cols:
-    bge  $t0, 16, top2rows_clear # done after col 16
+    bge  $t0, 10, top2rows_clear # done after col 10 since 4x4 grid
 
     # compute base offset = (row*16 + col)*4
     # first check row 0
