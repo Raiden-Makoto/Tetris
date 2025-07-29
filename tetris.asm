@@ -61,7 +61,7 @@ msg_gravity: .asciiz "Moving piece down\n"
 msg_a2: .asciiz "a2="
 msg_a3: .asciiz "a3="
 msg_spawn_failed: .asciiz "Failed to spawn piece. Ending game\n"
-msg_rows_full: .asciiz " full rows found.\n"
+msg_rows_full: .asciiz "Full row found at y="
 msg_counting_stars: .asciiz "Counting number of full rows...\n"
 msg_wtfhappen: .asciiz "Tetris pmo sm icl\n"
 
@@ -87,7 +87,7 @@ J: .half 0x0008, 0x000E, 0x0000, 0x0000   # J piece
 L: .half 0x0002, 0x000E, 0x0000, 0x0000   # L piece
 # I hate litle endian
 
-# Colors (hardcoded in random_bs_go becuse im too lazy to debug)
+# Colors
 #RED:   .word 0x00FF0000
 #GREEN: .word 0x0000FF00
 #DARK_BLUE:  .word 0x000000FF
@@ -255,6 +255,10 @@ draw_bottom_wall:
 	
 # loads a random piece and color and stores the piece in current_piece
 random_bs_go:
+	# — clear current_piece to all zeros
+    la   $t0, current_piece
+    sw   $zero, 0($t0)    # bytes 0–3 → 0
+    sw   $zero, 4($t0)    # bytes 4–7 → 0
     li   $v0, 42
     li   $a1, 700
     syscall
@@ -1247,58 +1251,59 @@ clear_grid_below:
     sh   $zero, 6($t0)
     jr $ra
 
+# finds the first full row 
 count_full_rows:
-	# starting from the bottom up, find the first filled row
-	# v1 contains the y coordinate of the row
-	# find row: move everything above down
-	# repeat until no rows
-	li $v0, 4
-	la $a0, msg_counting_stars # onerepublic reference?
-	syscall
-	li $v1, 0 # initially 0 rows
-	li $t9, 30 # bottom row
-	
-cfr_loop:
-	li $t0, 1 # x starts at 1 and ends at 14
-	li $t8, 0 # 0 filled columns
-	
+    li   $v1, -1          # default: no full row found
+    li   $t9, 30          # start at bottom playable row y=30
+
+scan_next_row:
+    bltz $t9, cfr_done    # if y < 0, we’ve scanned all rows → done
+    li   $t0, 1           # column x = 1
+    li   $t8, 0           # filled‑column count = 0
+
 cfr_scan_cols:
-	# scan the columns
-	bgt $t0, 14, is_row_full # check if the row is full
-    # address = s7 + ((y*16 + x)*4)
-    sll  $t2, $t9, 4           # t2 = y*16 16 columns
-    add  $t2, $t2, $t0         # t2 = y*16 + x
-    sll  $t2, $t2, 2           # t2 = byte offset 4 bytes/unit
-    add  $t2, $s7, $t2         # t2 = &framebuffer[y][x]
-    lw   $t3, 0($t2)           # load pixel
-    # if non‑checkerboard, count it
+    bgt  $t0, 14, check_full   # after x=14, test if row was full
+
+    # addr = s7 + ((y*16 + x) * 4)
+    sll  $t2, $t9, 4      # t2 = y * 16
+    add  $t2, $t2, $t0    # t2 = y*16 + x
+    sll  $t2, $t2, 2      # t2 = (y*16 + x)*4
+    add  $t2, $s7, $t2    # t2 = &framebuffer[y][x]
+    lw   $t3, 0($t2)      # t3 = pixel color
+
+    # if pixel is non‑checkerboard, count it
     li   $t4, 0x00222222
     beq  $t3, $t4, cfr_next_col
     li   $t4, 0x00333333
     beq  $t3, $t4, cfr_next_col
-    addi $t8, $t8, 1
-    
+    addi $t8, $t8, 1      # interior block → increment filled count
+
 cfr_next_col:
-	addi $t0, $t0, 1
-	j cfr_scan_cols
-	
-is_row_full:
-	# row is full if there are 14 non-checkerboard things
-	blt $t8, 14, caught_lacking # there were in fact not 14 non-cb things
-	addi $v1, $v1, 1 # row is full, move up
-	addi $t9, $t9, -1
-	bgez $t9, cfr_loop # keep counting as long as we don't fly into uranus
-	# otherwise we are done
-	
-caught_lacking:
+    addi $t0, $t0, 1      # x++
+    j    cfr_scan_cols
+
+check_full:
+    li   $t4, 14
+    bne  $t8, $t4, dec_row  # if not all 14 filled, go to next row
+    # found a full row at y=$t9
+    move $v1, $t9
+    j cfr_done # we done here boys
+
+dec_row:
+    addi $t9, $t9, -1     # move up one row
+    j    scan_next_row
+
+cfr_done:
+	li $v0, 4
+	la $a0, msg_rows_full
+	syscall
 	li $v0, 1
 	move $a0, $v1
 	syscall
 	li $v0, 4
-	la $a0, msg_rows_full
+	la $a0, newline
 	syscall
-	jr $ra
-
+    jr   $ra              # no full row found, $v1 == -1
 
 # FINAL FUNCTIONS: MUST GO AT BOTTOM!
 after_keyboard_handled:
