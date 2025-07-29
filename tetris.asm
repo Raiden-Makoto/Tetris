@@ -14,23 +14,26 @@
 # - Milestone 1: Drew the three walls and a checkboard grid, spawns initial tetromino
 # - Milestone 2: Movement (left, right, rotation and drop) added
 # - Milestone 3: All collision detection added
-# - TODO-stone: row clearing / IP
 #
 # Which approved features have been implemented?
 # (See the assignment handout for the list of features)
-# Easy Features:
+# Easy Features: (3 easy)
 # 1. Add sound effects for game intro, game over, hard drop and clearing row
 # 2. Added game over screen
-#	TODO: press R to restart the game
 # 3. Gravity (TODO)
-# 4. 
-# Hard Features:
+# Hard Features: (3 hard)
 # 1. Implement full set of tetrominoes
 # 2. Assuming that you’ve implemented the full set of Tetrominoes, make sure that each tetromino type is a different colour (TODO/IP)
-# 3. Wall kick feature (TODO)
-# ... (add more if necessary)
+# 3. Wall kick feature OR increase gravity speed
+# 
 # How to play:
-# Make a reasonable assumption
+# A: move left
+# D: move right
+# W: rotate right
+# S: rotate left
+# space bar: drop piece
+# Q: quit game
+# R: restart
 # Link to video demonstration for final submission:
 # - (insert YouTube / MyMedia / other URL here). Make sure we can view it!
 #
@@ -41,7 +44,11 @@
 # - (write here, if any)
 #
 #####################################################################
-
+# TODOS:
+# 1: Row clearing logic
+# 2: HF: map each piece to its corresponding color from original tetris
+# 3: EF: add gravity
+# 
 ##############################################################################
 
 .data
@@ -115,6 +122,7 @@ r_piece: .half 0x000E, 0x0009, 0x000E, 0x000C, 0x000A, 0x0009
 
 # Random ass notes
 .eqv F6 89
+.eqv Eflat6 87
 .eqv Csharp6 85
 .eqv Bflat5 82
 .eqv Gsharp5 80
@@ -392,6 +400,7 @@ process_key:
     beq $a0, 0x20, hard_drop # spacebar pressed
     beq $a0, 0x61, a_was_pressed   # 'a' pressed
     beq $a0, 0x64, d_was_pressed   # 'd' pressed
+    beq $a0, 0x72, r_was_pressed   # 'r' pressed
     beq $a0, 0x73, s_was_pressed   # 's' pressed
     beq $a0, 0x77, w_was_pressed   # 'w' pressed
     beq $a0, 0x71, done        # 'q' quit
@@ -644,105 +653,6 @@ crc_blocked:
     lw   $ra, 4($sp)
     addi $sp, $sp, 8
     jr   $ra
-    
-# For every completed line, clear it and move it down
-aplanehitthesecondtower:
-	jal mario_lvlup # play clear sound 
-	addi $sp, $sp, -4      # save return address
-    sw   $ra, 0($sp)
-    move $t0, $v1          # t0 = number of rows to clear
-    
-thetowerwentboom:
-	beq  $t0, $zero, nomoretowers
-    jal  clear_bottom_row
-    # short delay before moving everything down
-    li $a0, 80
-    jal nap_time
-    jal  takeitbacknowyo
-    addi $t0, $t0, -1
-    j    thetowerwentboom
-    
-nomoretowers: # no more rows to clear
-	lw   $ra, 0($sp)
-    addi $sp, $sp, 4
-    jr   $ra # return to parent
-
-# This function clears bottom row y=30 and resets to a checkerboard pattern
-# This function is part of the row clearing algorithm
-clear_bottom_row:
-	li $t0, 1
-	li $t1, 30 # bottom row y=30
-	
-clear_br_loop:
-	bgt $t0, 14, bottom_row_cleared
-	add  $t2, $t0, $t1
-    andi $t2, $t2, 1
-    beqz $t2, clear_br_dark   # even → dark
-    li   $t3, 0x00333333   # light gray
-    j    clear_br_store
-    
-clear_br_dark:
-	li $t3, 0x00222222 # dark gray
-	
-clear_br_store: #update the display
-	mul  $t4, $t1, 16         # t4 = y * 16
-    add  $t4, $t4, $t0        # t4 = y*16 + x
-    sll  $t4, $t4, 2          # t4 = byte‑offset = (y*16+x)*4
-    add  $t4, $s7, $t4        # t4 = &framebuffer[y][x]
-    sw   $t3, 0($t4)          # write checkerboard pixel
-    addi $t0, $t0, 1
-    j    clear_br_loop # keep looping
-    
-bottom_row_cleared:
-	jr $ra
-
-# This function shifts everything above the last row y=30
-# one unit down while preserving the checkerboard patterm   
-takeitbacknowyo:
-	li $t1, 29 # start from second last row and move up
-	
-onehopthistime:
-	blt $t1, 0, megaknight # there's nothing more to be done
-	li $t0, 1 # left most column
-	
-chacharealsmooth:
-	bgt $t0, 14, slidetothetop # this row done, move up
-    sll  $t2, $t1, 4         # t2 = y * 16
-    add  $t2, $t2, $t0       # t2 = y*16 + x
-    sll  $t2, $t2, 2         # t2 = (y*16+x)*4
-    add  $t2, $s7, $t2       # t2 = &framebuffer[y][x]
-    lw   $t3, 0($t2)         # t3 = pixel value
-	# swap checkerboard colors if needed ---
-    li   $t4, 0x00222222     # dark gray
-    beq  $t3, $t4, whitenight
-    li   $t4, 0x00333333     # light gray
-    beq  $t3, $t4, evernight # get me out of ekanomiya pls
-    j    tax_evasion
-
-whitenight:
-    li   $t3, 0x00333333
-    j    tax_evasion
-
-evernight:
-    li   $t3, 0x00222222
-    
-tax_evasion: #store the pixel
-	addi $t5, $t1, 1         # t5 = y+1
-    sll  $t6, $t5, 4         # t6 = (y+1)*16
-    add  $t6, $t6, $t0       # t6 = (y+1)*16 + x
-    sll  $t6, $t6, 2         # t6 = byte offset
-    add  $t6, $s7, $t6       # t6 = &framebuffer[y+1][x]
-    sw   $t3, 0($t6)
-    addi $t0, $t0, 1         # x++
-    j    chacharealsmooth
-    
-slidetothetop:
-	addi $t1, $t1, -1
-	j onehopthistime
-	
-megaknight:
-	#hurrrrrrrrrrrr
-	jr $ra
    
 # This function erases a piece and
 # reverts back the checkerboard pattern that was originally there
@@ -1071,6 +981,38 @@ is_opiece:
     li $v0, 1
     jr $ra
 
+r_was_pressed:
+	# Reset variables
+    li $s5, 0              # gravity counter
+    li $a2, 6              # piece spawn x
+    li $a3, 0              # piece spawn y
+
+    # Clear piece buffers
+    la $t0, current_piece
+    sw $zero, 0($t0)
+    sw $zero, 4($t0)
+    la $t0, rotated_piece
+    sw $zero, 0($t0)
+    sw $zero, 4($t0)
+
+    # Clear screen
+    jal draw_checkerboard
+    jal build_a_wall
+
+    # Clear collision buffers
+    jal clear_grid_left
+    jal clear_grid_right
+    jal clear_grid_below
+    
+    jal windows_startup # this sound to signal game reset
+
+    # Generate a new piece
+    jal random_bs_go
+    jal draw_pc_main
+
+    # Reset keyboard state and resume game
+    j after_keyboard_handled
+
 hard_drop:
     jal erase_pc_main       # remove piece from screen
     j hd_loop
@@ -1152,7 +1094,6 @@ next_col:
 
 top2rows_clear:
     jr   $ra
-
 
 check_downward_collision:
 	li $v1, 0
@@ -1390,7 +1331,7 @@ done:
     sb $t0, 774($s7)
     sb $t0, 775($s7)
 
-    # Row 7 (y = 7): offset = 896
+    # Row 7 (y = 7): offset = 896r_was_
     sb $t0, 896($s7)
     sb $t0, 897($s7)
     sb $t0, 898($s7)
@@ -1594,7 +1535,6 @@ print_coords:
     syscall
     jr   $ra
 
-
 pgrid_done:
     jr $ra
     
@@ -1642,6 +1582,23 @@ mac_startup_sound:
 	syscall
 	jr $ra
 	
+# windows startup sound
+windows_startup:
+	li $v0, 33
+	li $a2, 0 # piano is goated
+	li $a3, 100 # max volume
+	li $a0, Gsharp5
+	li $a1, 312
+	syscall
+	li $a0, Eflat5
+	syscall
+	li $a0, Aflat4
+	syscall
+	li $a0, Bflat4
+	li $a1, 625
+	syscall
+	jr $ra
+	
 mario_lvlup:
 	# play this sound for every row cleared
 	# G maj arpeg then Aflat then Bflat
@@ -1674,8 +1631,7 @@ mario_lvlup:
 	li $a0, Bflat5
 	syscall
 	jr $ra # remember to reset a2 and a3
-	
-							
+					
 washing_machine:
 	# ending theme
 	# plays main melody from die forelle (the trout)
