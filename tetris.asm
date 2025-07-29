@@ -55,7 +55,7 @@ msg_game_starting:	.asciiz "Game Starting\n"
 msg_wall_hit: .asciiz "Oh noes we hit trumps wall\n"
 msg_wall_safe: .asciiz "ice has deported the illegals\n"
 msg_game_over: .asciiz "Ur kinda bad at ts game\n"
-msg_lock_piece :.asciiz "Get locked up nigga\n"
+msg_lock_piece :.asciiz "Get locked up\n"
 msg_gravity: .asciiz "Moving piece down\n"
 msg_a2: .asciiz "a2="
 msg_a3: .asciiz "a3="
@@ -83,7 +83,7 @@ J: .half 0x0008, 0x000E, 0x0000, 0x0000   # J piece
 L: .half 0x0002, 0x000E, 0x0000, 0x0000   # L piece
 # I hate litle endian
 
-# Colors (hardcoded in random_bs_go because im too lazy to debug)
+# Colors (hardcoded in random_bs_go becuse im too lazy to debug)
 #RED:   .word 0x00FF0000
 #GREEN: .word 0x0000FF00
 #DARK_BLUE:  .word 0x000000FF
@@ -399,18 +399,135 @@ process_key:
     j game_loop
     
 a_was_pressed:
-    addi $a2, $a2, -1            # decrease x by 1 to move left, y is the same
-    jal  check_hitting_wall      # check if we cant move the piece left
-     addi $a2, $a2, 1
+    jal erase_pc_main # erase the piece so we don't self collide
+    jal check_left_collision # check if we can move left part 2
     bnez $v1, you_cant_move_left # if yes, do nothing and go back to game
-    jal erase_pc_main # erase the piece
+    #jal erase_pc_main # erase the piece
     addi $a2, $a2, -1
+    jal clear_grid_left # clear the grid
     jal  draw_pc_main # redraws the piece 1 left
     j after_keyboard_handled # continue after key press
 
-
 you_cant_move_left:
+	jal clear_grid_left
+	jal draw_pc_main # redraw the piece 
 	j after_keyboard_handled # do nothing and continue game
+
+
+check_left_collision:
+    addi $sp, $sp, -8       # make room for two words
+    sw   $ra, 4($sp)        # save return address
+
+    li   $v1, 0             # assume no collision
+    jal  get_grid_left      # fills grid_left[0..3]
+
+    # load piece rows
+    lhu  $t0, 0($s0)
+    lhu  $t1, 2($s0)
+    lhu  $t2, 4($s0)
+    lhu  $t3, 6($s0)
+
+    # load grid_left masks
+    la   $t8, grid_left
+    lhu  $t4, 0($t8)
+    lhu  $t5, 2($t8)
+    lhu  $t6, 4($t8)
+    lhu  $t7, 6($t8)
+
+    # AND/OR overlap test
+    and  $t9, $t0, $t4
+    and  $t8, $t1, $t5
+    or   $t9, $t9, $t8
+    and  $t8, $t2, $t6
+    or   $t9, $t9, $t8
+    and  $t8, $t3, $t7
+    or   $t9, $t9, $t8
+
+    bnez $t9, clc_blocked
+
+    # restore ra & sp, then return
+    lw   $ra, 4($sp)
+    addi $sp, $sp, 8
+    jr   $ra
+
+clc_blocked:
+    li   $v1, 1
+    # restore ra & sp, then return
+    lw   $ra, 4($sp)
+    addi $sp, $sp, 8
+    jr   $ra
+
+
+# ----------------------------------------------------------------------------
+# get_grid_left
+#   Inputs:  $a2 = piece X (0…15), $a3 = piece Y (0…31)
+#   Uses:    $s7 = framebuffer base address
+#   Output:  grid_left[0..3] ← 4×4 mask of occupied cells one unit left of piece
+#             (bit 3→col 0, bit 0→col 3); out‑of‑bounds counts as occupied.
+# ----------------------------------------------------------------------------
+get_grid_left:
+    la    $t0, grid_left      # pointer into grid_left buffer
+    li    $t1, 0              # row index i = 0
+
+gl_row_loop:
+    beq   $t1, 4, gl_done     # done after 4 rows
+    li    $t2, 0              # accumulator mask for this row
+    li    $t3, 0              # column index j = 0
+
+gl_col_loop:
+    beq   $t3, 4, gl_store    # after 4 columns, store mask
+
+    # compute screen coords: X = (a2 - 1) + j , Y = a3 + i
+    addi  $t4, $a2, -1        # t4 = a2 - 1
+    add   $t4, $t4, $t3       # t4 = screen X
+    add   $t5, $a3, $t1       # t5 = screen Y
+
+    # if X < 0 or X ≥ 16 → mark occupied
+    bltz  $t4, gl_setbit
+    li    $t6, 16
+    bge   $t4, $t6, gl_setbit
+
+    # load pixel at (X,Y)
+    mul   $t7, $t5, 16        # t7 = Y * 16
+    add   $t7, $t7, $t4       # t7 = Y*16 + X
+    sll   $t7, $t7, 2         # t7 = byte offset = (Y*16+X)*4
+    add   $t7, $s7, $t7       # t7 = &framebuffer[Y][X]
+    lw    $t8, 0($t7)
+
+    # skip if checkerboard gray (empty cell)
+    li    $t6, 0x00222222
+    beq   $t8, $t6, gl_nextcol
+    li    $t6, 0x00333333
+    beq   $t8, $t6, gl_nextcol
+
+gl_setbit:
+    # set bit (3 - j) in mask t2
+    li    $t6, 3
+    sub   $t6, $t6, $t3       # bit index = 3 - j
+    li    $t7, 1
+    sllv  $t7, $t7, $t6
+    or    $t2, $t2, $t7
+
+gl_nextcol:
+    addi  $t3, $t3, 1
+    j     gl_col_loop
+
+gl_store:
+    sh    $t2, 0($t0)         # store this row’s mask
+    addi  $t0, $t0, 2         # advance buffer pointer
+    addi  $t1, $t1, 1         # next row
+    j     gl_row_loop
+
+gl_done:
+    jr    $ra
+
+clear_grid_left:
+    la   $t0, grid_left   # pointer to grid_left buffer
+    sh   $zero, 0($t0)    # clear row 0
+    sh   $zero, 2($t0)    # clear row 1
+    sh   $zero, 4($t0)    # clear row 2
+    sh   $zero, 6($t0)    # clear row 3
+    jr   $ra
 
 d_was_pressed:
     addi $a2, $a2, 1             # increase x by 1 to move right, y is the same
