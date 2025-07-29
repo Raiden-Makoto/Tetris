@@ -63,6 +63,7 @@ msg_a3: .asciiz "a3="
 msg_spawn_failed: .asciiz "Failed to spawn piece. Ending game\n"
 msg_rows_full: .asciiz " full rows found.\n"
 msg_counting_stars: .asciiz "Counting number of full rows...\n"
+msg_wtfhappen: .asciiz "Tetris pmo sm icl\n"
 
 ##############################################################################
 # Immutable Data
@@ -600,13 +601,6 @@ gr_store:
 gr_done:
     jr    $ra
 
-
-# ----------------------------------------------------------------------------
-# check_right_collision
-#   Returns v1=1 if moving the current_piece one cell to the right
-#   would overlap any occupied cell in grid_right; else v1=0.
-#   Saves/restores $ra so jr $ra returns to caller.
-# ----------------------------------------------------------------------------
 check_right_collision:
     addi $sp, $sp, -8        # make room on stack
     sw   $ra, 4($sp)         # save return address
@@ -1004,16 +998,19 @@ hd_collision:
     li $a0, 320 # wait before clearing rows
     jal nap_time
     # count how many rows are filled
+    jal mac_startup_sound # play this every time a piece hard drops
     jal count_full_rows
     #bnez $v1, clear_completed_lines #clear completed lines if we have them
 
     # spawn the next piece
+    li $a0, 320
+    jal nap_time
 
     # get a new random piece and reset x,y
     jal check_top2rows_empty
     bnez $v1, piece_died # end the game, we can't spawn
     # otherwise we can spawn the piece
-    jal mac_startup_sound # play this every time a piece hard drops
+    #jal mac_startup_sound # play this every time a piece hard drops
     li $a2, 6
     li $a3, 0
     jal random_bs_go
@@ -1180,7 +1177,7 @@ cfr_scan_cols:
     lw   $t3, 0($t2)           # load pixel
     # if non‑checkerboard, count it
     li   $t4, 0x00222222
-    beq  $t3, $t4, next_col
+    beq  $t3, $t4, cfr_next_col
     li   $t4, 0x00333333
     beq  $t3, $t4, cfr_next_col
     addi $t8, $t8, 1
@@ -1191,17 +1188,18 @@ cfr_next_col:
 	
 is_row_full:
 	# row is full if there are 14 non-checkerboard things
-	bne $t8, 14, caught_lacking # there were in fact not 14 non-cb things
+	blt $t8, 14, caught_lacking # there were in fact not 14 non-cb things
 	addi $v1, $v1, 1 # row is full, move up
 	addi $t9, $t9, -1
 	bgez $t9, cfr_loop # keep counting as long as we don't fly into uranus
 	# otherwise we are done
 	
 caught_lacking:
-	li $v0, 4
+	li $v0, 1
 	move $a0, $v1
 	syscall
-	la $a0 msg_rows_full
+	li $v0, 4
+	la $a0, msg_rows_full
 	syscall
 	jr $ra
 
