@@ -19,7 +19,7 @@
 # (See the assignment handout for the list of features)
 # Easy Features: (3 easy)
 # 1. Add sound effects for game intro, game over, hard drop and clearing row
-# 2. Added game over screen
+# 2. Added game over screen, restart option, and play again option
 # 3. Gravity (TODO)
 # Hard Features: (3 hard)
 # 1. Implement full set of tetrominoes
@@ -45,7 +45,7 @@
 #
 #####################################################################
 # TODOS:
-# 1: Row clearing logic
+# 1: Row clearing logic (!!)
 # 2: HF: map each piece to its corresponding color from original tetris
 # 3: EF: add gravity
 # 
@@ -1201,7 +1201,6 @@ scan_next_row:
 
 cfr_scan_cols:
     bgt  $t0, 14, check_full   # after x=14, test if row was full
-
     # addr = s7 + ((y*16 + x) * 4)
     sll  $t2, $t9, 4      # t2 = y * 16
     add  $t2, $t2, $t0    # t2 = y*16 + x
@@ -1331,7 +1330,7 @@ done:
     sb $t0, 774($s7)
     sb $t0, 775($s7)
 
-    # Row 7 (y = 7): offset = 896r_was_
+    # Row 7 (y = 7): offset = 896
     sb $t0, 896($s7)
     sb $t0, 897($s7)
     sb $t0, 898($s7)
@@ -1464,10 +1463,39 @@ game_over_yay:
     jal gmovr_draw_pc_main
     # play davids washing machine song
     jal washing_machine
-    # Exit program
-    li $v0, 10
-    syscall
-    
+    j play_again_check
+   
+	# load keyboard
+	# check if r is pressed in the next 5 seconds
+	# if yes, jump to r_was_pressed (resets game)
+	# if not, quit program
+play_again_check:
+    li   $t0, 0          # elapsed time (ms)
+
+wait_for_r_loop:
+    li   $t1, 5000       # 5000 ms = 5 sec
+    bge  $t0, $t1, quit_game
+
+    lw   $t2, 0($s6)     # poll keyboard status
+    andi $t2, $t2, 1
+    beqz $t2, sleep_and_check_next
+
+    lw   $t3, 4($s6)     # load key code
+    li   $t4, 0x72       # ASCII for 'r'
+    beq  $t3, $t4, r_was_pressed
+
+    sw   $zero, 0($s6)   # clear keyboard status
+
+sleep_and_check_next:
+    li   $a0, 100
+    jal  nap_time        # sleep 100 ms
+    addi $t0, $t0, 100   # add 100 ms to elapsed
+    j    wait_for_r_loop
+
+quit_game:
+    li $v0, 10           # exit program
+    syscall	    
+ 
  # DEBUG PRINTS THAT ARE WILL BE REMOVED LATER
  print_grid_below:
     la   $t0, grid_below     # pointer to grid_below
