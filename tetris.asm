@@ -643,6 +643,28 @@ crc_blocked:
     lw   $ra, 4($sp)
     addi $sp, $sp, 8
     jr   $ra
+    
+# For every completed line, clear it and move it down
+aplanehitthesecondtower:
+	jal mario_lvlup # play clear sound 
+	addi $sp, $sp, -4      # save return address
+    sw   $ra, 0($sp)
+    move $t0, $v1          # t0 = number of rows to clear
+    
+thetowerwentboom:
+	beq  $t0, $zero, nomoretowers
+    jal  clear_bottom_row
+    # short delay before moving everything down
+    li $a0, 80
+    jal nap_time
+    jal  takeitbacknowyo
+    addi $t0, $t0, -1
+    j    thetowerwentboom
+    
+nomoretowers: # no more rows to clear
+	lw   $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr   $ra # return to parent
 
 # This function clears bottom row y=30 and resets to a checkerboard pattern
 # This function is part of the row clearing algorithm
@@ -673,6 +695,53 @@ clear_br_store: #update the display
 bottom_row_cleared:
 	jr $ra
 
+# This function shifts everything above the last row y=30
+# one unit down while preserving the checkerboard patterm   
+takeitbacknowyo:
+	li $t1, 29 # start from second last row and move up
+	
+onehopthistime:
+	blt $t1, 0, megaknight # there's nothing more to be done
+	li $t0, 1 # left most column
+	
+chacharealsmooth:
+	bgt $t0, 14, slidetothetop # this row done, move up
+    sll  $t2, $t1, 4         # t2 = y * 16
+    add  $t2, $t2, $t0       # t2 = y*16 + x
+    sll  $t2, $t2, 2         # t2 = (y*16+x)*4
+    add  $t2, $s7, $t2       # t2 = &framebuffer[y][x]
+    lw   $t3, 0($t2)         # t3 = pixel value
+	# swap checkerboard colors if needed ---
+    li   $t4, 0x00222222     # dark gray
+    beq  $t3, $t4, whitenight
+    li   $t4, 0x00333333     # light gray
+    beq  $t3, $t4, evernight # get me out of ekanomiya pls
+    j    tax_evasion
+
+whitenight:
+    li   $t3, 0x00333333
+    j    tax_evasion
+
+evernight:
+    li   $t3, 0x00222222
+    
+tax_evasion: #store the pixel
+	addi $t5, $t1, 1         # t5 = y+1
+    sll  $t6, $t5, 4         # t6 = (y+1)*16
+    add  $t6, $t6, $t0       # t6 = (y+1)*16 + x
+    sll  $t6, $t6, 2         # t6 = byte offset
+    add  $t6, $s7, $t6       # t6 = &framebuffer[y+1][x]
+    sw   $t3, 0($t6)
+    addi $t0, $t0, 1         # x++
+    j    chacharealsmooth
+    
+slidetothetop:
+	addi $t1, $t1, -1
+	j onehopthistime
+	
+megaknight:
+	#hurrrrrrrrrrrr
+	jr $ra
    
 # This function erases a piece and
 # reverts back the checkerboard pattern that was originally there
@@ -1023,18 +1092,15 @@ hd_collision:
     # if we can't, we need to lock the piece where it is currently
     # subtracting 1 from y will make it go up a row, which is bad
     jal draw_pc_main        # draw permanently at final position
-    
     li $a0, 320 # wait before clearing rows
     jal nap_time
-    # count how many rows are filled
+    # row clearing logic
     jal mac_startup_sound # play this every time a piece hard drops
-    jal count_full_rows
-    #bnez $v1, clear_completed_lines #clear completed lines if we have them
-
+    jal count_full_rows # count how many rows are filled
+    #bnez $v1, aplanehitthesecondtower #clear completed lines if we have them
     # spawn the next piece
     li $a0, 320
     jal nap_time
-
     # get a new random piece and reset x,y
     jal check_top2rows_empty
     bnez $v1, piece_died # end the game, we can't spawn
@@ -1182,9 +1248,10 @@ clear_grid_below:
     jr $ra
 
 count_full_rows:
-	# starting from the bottom up, count the number of rows
-	# that have been completely filled
-	# v1 contains this number
+	# starting from the bottom up, find the first filled row
+	# v1 contains the y coordinate of the row
+	# find row: move everything above down
+	# repeat until no rows
 	li $v0, 4
 	la $a0, msg_counting_stars # onerepublic reference?
 	syscall
