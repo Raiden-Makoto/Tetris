@@ -530,17 +530,146 @@ clear_grid_left:
     jr   $ra
 
 d_was_pressed:
-    addi $a2, $a2, 1             # increase x by 1 to move right, y is the same
-    jal  check_hitting_wall     # check if we can't move the piece right
-     addi $a2, $a2, -1
+    jal erase_pc_main # erase the piece so we don't self collide
+    jal check_right_collision # check if we can move left part 2
     bnez $v1, you_cant_move_right # if yes, do nothing and go back to game
-    jal erase_pc_main
+    #jal erase_pc_main # erase the piece
     addi $a2, $a2, 1
-    jal  draw_pc_main # redraws the piece 1 right
+    jal clear_grid_right # clear the grid
+    jal  draw_pc_main # redraws the piece 1 left
     j after_keyboard_handled # continue after key press
 
 you_cant_move_right:
-    j after_keyboard_handled # do nothing and continue game
+	jal clear_grid_right
+	jal draw_pc_main # redraw the piece 
+	j after_keyboard_handled # do nothing and continue game
+
+    
+# ----------------------------------------------------------------------------
+# clear_grid_right
+#   Clears the 4×4 occupancy mask in grid_right by storing 0 to each halfword.
+# ----------------------------------------------------------------------------
+clear_grid_right:
+    la   $t0, grid_right   # pointer to grid_right buffer
+    sh   $zero, 0($t0)     # clear row 0
+    sh   $zero, 2($t0)     # clear row 1
+    sh   $zero, 4($t0)     # clear row 2
+    sh   $zero, 6($t0)     # clear row 3
+    jr   $ra
+
+# ----------------------------------------------------------------------------
+# get_grid_right
+#   Inputs:  $a2 = piece X (0…15), $a3 = piece Y (0…31)
+#   Uses:    $s7 = framebuffer base address
+#   Output:  grid_right[0..3] ← 4×4 mask of occupied cells one unit right of piece
+#             (bit 3→col 0, bit 0→col 3); out‑of‑bounds counts as occupied.
+# ----------------------------------------------------------------------------
+get_grid_right:
+    la    $t0, grid_right    # ptr → grid_right buffer
+    li    $t1, 0             # row index i = 0
+
+gr_row_loop:
+    beq   $t1, 4, gr_done    # done after 4 rows
+    li    $t2, 0             # accumulator mask for this row
+    li    $t3, 0             # column index j = 0
+
+gr_col_loop:
+    beq   $t3, 4, gr_store   # after 4 columns, store mask
+
+    # compute screen coords: X = (a2 + 1) + j , Y = a3 + i
+    addi  $t4, $a2, 1        # t4 = a2 + 1
+    add   $t4, $t4, $t3      # t4 = screen X
+    add   $t5, $a3, $t1      # t5 = screen Y
+
+    # if X < 0 or X ≥ 16 → mark occupied
+    bltz  $t4, gr_setbit
+    li    $t6, 16
+    bge   $t4, $t6, gr_setbit
+
+    # load pixel at (X,Y)
+    mul   $t7, $t5, 16       # t7 = Y * 16
+    add   $t7, $t7, $t4      # t7 = Y*16 + X
+    sll   $t7, $t7, 2        # byte offset
+    add   $t7, $s7, $t7      # &frame[Y][X]
+    lw    $t8, 0($t7)
+
+    # skip if checkerboard gray (empty)
+    li    $t6, 0x00222222
+    beq   $t8, $t6, gr_nextcol
+    li    $t6, 0x00333333
+    beq   $t8, $t6, gr_nextcol
+
+gr_setbit:
+    # set bit (3 - j) in mask t2
+    li    $t6, 3
+    sub   $t6, $t6, $t3      # bit index = 3 - j
+    li    $t7, 1
+    sllv  $t7, $t7, $t6
+    or    $t2, $t2, $t7
+
+gr_nextcol:
+    addi  $t3, $t3, 1
+    j     gr_col_loop
+
+gr_store:
+    sh    $t2, 0($t0)        # store this row’s mask
+    addi  $t0, $t0, 2        # advance buffer ptr
+    addi  $t1, $t1, 1        # next row
+    j     gr_row_loop
+
+gr_done:
+    jr    $ra
+
+
+# ----------------------------------------------------------------------------
+# check_right_collision
+#   Returns v1=1 if moving the current_piece one cell to the right
+#   would overlap any occupied cell in grid_right; else v1=0.
+#   Saves/restores $ra so jr $ra returns to caller.
+# ----------------------------------------------------------------------------
+check_right_collision:
+    addi $sp, $sp, -8        # make room on stack
+    sw   $ra, 4($sp)         # save return address
+
+    li   $v1, 0
+    jal  clear_grid_right
+    jal  get_grid_right      # fills grid_right[0..3]
+
+    # load piece rows
+    lhu  $t0, 0($s0)
+    lhu  $t1, 2($s0)
+    lhu  $t2, 4($s0)
+    lhu  $t3, 6($s0)
+
+    # load grid_right masks
+    la   $t7, grid_right
+    lhu  $t4, 0($t7)
+    lhu  $t5, 2($t7)
+    lhu  $t6, 4($t7)
+    lhu  $t7, 6($t7)
+
+    # overlap test (AND/OR as in check_downward_collision)
+    and  $t9, $t0, $t4
+    and  $t8, $t1, $t5
+    or   $t9, $t9, $t8
+    and  $t8, $t2, $t6
+    or   $t9, $t9, $t8
+    and  $t8, $t3, $t7
+    or   $t9, $t9, $t8
+
+    bnez $t9, crc_blocked
+    # restore and return
+    lw   $ra, 4($sp)
+    addi $sp, $sp, 8
+    jr   $ra
+
+crc_blocked:
+    li   $v1, 1
+    # restore and return
+    lw   $ra, 4($sp)
+    addi $sp, $sp, 8
+    jr   $ra
+
    
 # This function erases a piece and
 # reverts back the checkerboard pattern that was originally there
