@@ -13,7 +13,7 @@
 # - Milestone 1/2/3/4/5 (choose the one the applies)
 # - Milestone 1: Drew the three walls and a checkboard grid, spawns initial tetromino
 # - Milestone 2: Movement (left, right, rotation and drop) added
-# - Milestone 3: only wall and downward collision detection implemented
+# - Milestone 3: All collision detection added
 # - TODO-stone: implement left and right collision, row clearing
 #
 # Which approved features have been implemented?
@@ -259,9 +259,6 @@ random_bs_go:
     li   $t3, 8
     mul  $t4, $t1, $t3
     add  $s0, $t2, $t4         # $s0 = pointer to random piece
-
-    #––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-    # pick a random color by index in $t5, then load hex literal
     li   $v0, 42
     li   $a1, 777
     syscall
@@ -457,14 +454,6 @@ clc_blocked:
     addi $sp, $sp, 8
     jr   $ra
 
-
-# ----------------------------------------------------------------------------
-# get_grid_left
-#   Inputs:  $a2 = piece X (0…15), $a3 = piece Y (0…31)
-#   Uses:    $s7 = framebuffer base address
-#   Output:  grid_left[0..3] ← 4×4 mask of occupied cells one unit left of piece
-#             (bit 3→col 0, bit 0→col 3); out‑of‑bounds counts as occupied.
-# ----------------------------------------------------------------------------
 get_grid_left:
     la    $t0, grid_left      # pointer into grid_left buffer
     li    $t1, 0              # row index i = 0
@@ -544,11 +533,6 @@ you_cant_move_right:
 	jal draw_pc_main # redraw the piece 
 	j after_keyboard_handled # do nothing and continue game
 
-    
-# ----------------------------------------------------------------------------
-# clear_grid_right
-#   Clears the 4×4 occupancy mask in grid_right by storing 0 to each halfword.
-# ----------------------------------------------------------------------------
 clear_grid_right:
     la   $t0, grid_right   # pointer to grid_right buffer
     sh   $zero, 0($t0)     # clear row 0
@@ -557,13 +541,6 @@ clear_grid_right:
     sh   $zero, 6($t0)     # clear row 3
     jr   $ra
 
-# ----------------------------------------------------------------------------
-# get_grid_right
-#   Inputs:  $a2 = piece X (0…15), $a3 = piece Y (0…31)
-#   Uses:    $s7 = framebuffer base address
-#   Output:  grid_right[0..3] ← 4×4 mask of occupied cells one unit right of piece
-#             (bit 3→col 0, bit 0→col 3); out‑of‑bounds counts as occupied.
-# ----------------------------------------------------------------------------
 get_grid_right:
     la    $t0, grid_right    # ptr → grid_right buffer
     li    $t1, 0             # row index i = 0
@@ -1268,7 +1245,6 @@ done:
     sb $t0, 901($s7)
     sb $t0, 902($s7)
     sb $t0, 903($s7)
-	
 	
 	# everything else
 	li $a2, 0
