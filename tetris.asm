@@ -14,7 +14,7 @@
 # - Milestone 1: Drew the three walls and a checkboard grid, spawns initial tetromino
 # - Milestone 2: Movement (left, right, rotation and drop) added
 # - Milestone 3: All collision detection added
-# - TODO-stone: implement left and right collision, row clearing
+# - TODO-stone: row clearing / IP
 #
 # Which approved features have been implemented?
 # (See the assignment handout for the list of features)
@@ -26,7 +26,8 @@
 # 4. 
 # Hard Features:
 # 1. Implement full set of tetrominoes
-# 2. Wall kick feature (TODO)
+# 2. Assuming that you’ve implemented the full set of Tetrominoes, make sure that each tetromino type is a different colour (TODO/IP)
+# 3. Wall kick feature (TODO)
 # ... (add more if necessary)
 # How to play:
 # Make a reasonable assumption
@@ -52,14 +53,16 @@ msg_key_pressed:       .asciiz "This key was pressed: "
 msg_erasing_piece:   .asciiz "Erasing piece\n"
 msg_drawing_piece:   .asciiz "Drawing new piece\n"
 msg_game_starting:	.asciiz "Game Starting\n"
-msg_wall_hit: .asciiz "Oh noes we hit trumps wall\n"
-msg_wall_safe: .asciiz "ice has deported the illegals\n"
+msg_wall_hit: .asciiz "WALL\n"
+msg_wall_safe: .asciiz "SAFE\n"
 msg_game_over: .asciiz "Ur kinda bad at ts game\n"
 msg_lock_piece :.asciiz "Get locked up\n"
 msg_gravity: .asciiz "Moving piece down\n"
 msg_a2: .asciiz "a2="
 msg_a3: .asciiz "a3="
 msg_spawn_failed: .asciiz "Failed to spawn piece. Ending game\n"
+msg_rows_full: .asciiz " full rows found.\n"
+msg_counting_stars: .asciiz "Counting number of full rows...\n"
 
 ##############################################################################
 # Immutable Data
@@ -997,10 +1000,14 @@ hd_collision:
     # if we can't, we need to lock the piece where it is currently
     # subtracting 1 from y will make it go up a row, which is bad
     jal draw_pc_main        # draw permanently at final position
-
-    # small pause before spawning next piece
-    li $a0, 349
+    
+    li $a0, 320 # wait before clearing rows
     jal nap_time
+    # count how many rows are filled
+    jal count_full_rows
+    #bnez $v1, clear_completed_lines #clear completed lines if we have them
+
+    # spawn the next piece
 
     # get a new random piece and reset x,y
     jal check_top2rows_empty
@@ -1147,6 +1154,57 @@ clear_grid_below:
     sh   $zero, 4($t0)
     sh   $zero, 6($t0)
     jr $ra
+
+count_full_rows:
+	# starting from the bottom up, count the number of rows
+	# that have been completely filled
+	# v1 contains this number
+	li $v0, 4
+	la $a0, msg_counting_stars # onerepublic reference?
+	syscall
+	li $v1, 0 # initially 0 rows
+	li $t9, 30 # bottom row
+	
+cfr_loop:
+	li $t0, 1 # x starts at 1 and ends at 14
+	li $t8, 0 # 0 filled columns
+	
+cfr_scan_cols:
+	# scan the columns
+	bgt $t0, 14, is_row_full # check if the row is full
+    # address = s7 + ((y*16 + x)*4)
+    sll  $t2, $t9, 4           # t2 = y*16 16 columns
+    add  $t2, $t2, $t0         # t2 = y*16 + x
+    sll  $t2, $t2, 2           # t2 = byte offset 4 bytes/unit
+    add  $t2, $s7, $t2         # t2 = &framebuffer[y][x]
+    lw   $t3, 0($t2)           # load pixel
+    # if non‑checkerboard, count it
+    li   $t4, 0x00222222
+    beq  $t3, $t4, next_col
+    li   $t4, 0x00333333
+    beq  $t3, $t4, cfr_next_col
+    addi $t8, $t8, 1
+    
+cfr_next_col:
+	addi $t0, $t0, 1
+	j cfr_scan_cols
+	
+is_row_full:
+	# row is full if there are 14 non-checkerboard things
+	bne $t8, 14, caught_lacking # there were in fact not 14 non-cb things
+	addi $v1, $v1, 1 # row is full, move up
+	addi $t9, $t9, -1
+	bgez $t9, cfr_loop # keep counting as long as we don't fly into uranus
+	# otherwise we are done
+	
+caught_lacking:
+	li $v0, 4
+	move $a0, $v1
+	syscall
+	la $a0 msg_rows_full
+	syscall
+	jr $ra
+
 
 # FINAL FUNCTIONS: MUST GO AT BOTTOM!
 after_keyboard_handled:
