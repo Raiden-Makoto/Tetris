@@ -271,7 +271,6 @@ random_bs_go:
     li   $a1, 777
     syscall
     remu $t5, $a0, 7           # $t5 = 0…6
-
     beqz  $t5, pick_red
     li    $t6, 1
     beq   $t5, $t6, pick_green
@@ -314,10 +313,6 @@ pick_yellow:
     li   $s1, 0x00FFFF00   # YELLOW
 
 pick_done:
-    # $s1 now holds your hard‑coded color
-    #––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-
-    # Copy selected piece into current_piece buffer
     la   $t0, current_piece
     li   $t1, 0
 
@@ -331,6 +326,7 @@ copy_piece_loop:
     j    copy_piece_loop
 
 done_copying:
+	la $s0, current_piece # oops
     li   $a2, 6
     li   $a3, 0
     jr   $ra
@@ -374,6 +370,7 @@ next_row:
 
 done_drawing:
     jr $ra
+
 
 game_loop:
     lw $t9, 0($s6)          # poll keyboard control
