@@ -644,6 +644,35 @@ crc_blocked:
     addi $sp, $sp, 8
     jr   $ra
 
+# This function clears bottom row y=30 and resets to a checkerboard pattern
+# This function is part of the row clearing algorithm
+clear_bottom_row:
+	li $t0, 1
+	li $t1, 30 # bottom row y=30
+	
+clear_br_loop:
+	bgt $t0, 14, bottom_row_cleared
+	add  $t2, $t0, $t1
+    andi $t2, $t2, 1
+    beqz $t2, clear_br_dark   # even → dark
+    li   $t3, 0x00333333   # light gray
+    j    clear_br_store
+    
+clear_br_dark:
+	li $t3, 0x00222222 # dark gray
+	
+clear_br_store: #update the display
+	mul  $t4, $t1, 16         # t4 = y * 16
+    add  $t4, $t4, $t0        # t4 = y*16 + x
+    sll  $t4, $t4, 2          # t4 = byte‑offset = (y*16+x)*4
+    add  $t4, $s7, $t4        # t4 = &framebuffer[y][x]
+    sw   $t3, 0($t4)          # write checkerboard pixel
+    addi $t0, $t0, 1
+    j    clear_br_loop # keep looping
+    
+bottom_row_cleared:
+	jr $ra
+
    
 # This function erases a piece and
 # reverts back the checkerboard pattern that was originally there
@@ -1750,4 +1779,3 @@ washing_machine:
 	li $a1 1250
 	syscall
 	jr $ra
-	
