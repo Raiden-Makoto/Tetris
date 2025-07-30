@@ -10,21 +10,22 @@
 #
 # Which milestones have been reached in this submission?
 # (See the assignment handout for descriptions of the milestones)
-# - Milestone 1/2/3/4/5 (choose the one the applies)
+# - Milestone current: 3
 # - Milestone 1: Drew the three walls and a checkboard grid, spawns initial tetromino
 # - Milestone 2: Movement (left, right, rotation and drop) added
-# - Milestone 3: All collision detection added
+# - Milestone 3: All collision detection added, and row clearing added
+# - Milestone 4: 2 Easy, 1 Hard, need 1 more Easy
 #
 # Which approved features have been implemented?
-# (See the assignment handout for the list of features)
+# WE ARE GOING TO DO 4 EASY 2 HARD
 # Easy Features: (3 easy)
 # 1. Add sound effects for game intro, game over, hard drop and clearing row
 # 2. Added game over screen, restart option, and play again option
 # 3. Gravity (TODO)
+# 4. Make sure that each tetromino type is a different colour (TODO/IP)
 # Hard Features: (3 hard)
 # 1. Implement full set of tetrominoes
-# 2. Assuming that you’ve implemented the full set of Tetrominoes, make sure that each tetromino type is a different colour (TODO/IP)
-# 3. Wall kick feature OR increase gravity speed
+# 2. Wall kick feature
 # 
 # How to play:
 # A: move left
@@ -47,9 +48,9 @@
 #
 #####################################################################
 # TODOS:
-# 1: Row clearing logic (!!)
-# 2: HF: map each piece to its corresponding color from original tetris
-# 3: EF: add gravity
+# 1: HF: map each piece to its corresponding color from original tetris
+# 2: EF: add gravity
+# 3: EF
 # 
 ##############################################################################
 
