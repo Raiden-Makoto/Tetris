@@ -440,20 +440,19 @@ clc_blocked:
     jr   $ra
 
 get_grid_left:
-    la    $t0, grid_left  # pointer into grid_left buffer
-    li    $t1, 0   # row index i = 0
+    la    $t0, grid_left
+    li    $t1, 0 
 
 gl_row_loop:
-    beq   $t1, 4, gl_done   # done after 4 rows
-    li    $t2, 0 # bitmask for this row
-    li    $t3, 0  # column index j = 0
+    beq   $t1, 4, gl_done 
+    li    $t2, 0 
+    li    $t3, 0 
 
 gl_col_loop:
-    beq   $t3, 4, gl_store    # after 4 columns, store mask
-    # compute screen location: X = (a2 - 1) + j , Y = a3 + i
-    addi  $t4, $a2, -1    # t4 = a2 - 1
-    add   $t4, $t4, $t3  # t4 = screen X
-    add   $t5, $a3, $t1   # t5 = screen Y
+    beq   $t3, 4, gl_store 
+    addi  $t4, $a2, -1    
+    add   $t4, $t4, $t3  
+    add   $t5, $a3, $t1
     # if X < 0 or X >= 16 set as occupied so we don't fall off the map
     bltz  $t4, gl_setbit
     li    $t6, 16
@@ -613,19 +612,17 @@ erase_pc_main:
 	
 erase_row:
 	beq  $t0, 4, get_eliminated_nub
-	lhu  $t1, 0($t2)  # Load 16-bit row
-    li   $t4, 0   # column index (0 to 3)
+	lhu  $t1, 0($t2)  
+    li   $t4, 0 
     
 erase_col:
 	beq $t4, 4, next_erase_row
-	# Check if the bit is set at (3 - col)
     li   $t5, 3
     sub  $t5, $t5, $t4
     li   $t6, 1
     sllv $t6, $t6, $t5
     and  $t7, $t1, $t6
-    beqz $t7, skip_erase_block  # If 0, no need to erasegravt
-	# Calculate (x, y) on screen grid
+    beqz $t7, skip_erase_block 
     add  $t8, $a2, $t4    # x = $a2 + col
     add  $t9, $a3, $t0    # y = $a3 + row
     # (x + y) % 2 to determine color
@@ -639,19 +636,18 @@ use_dark:
 	li $t7, 0x00222222
 	
 erase_store:
-    # Compute display address = $s7 + (y * 64 + x * 4)
-    sll  $t5, $t9, 6  # y * 64
-    sll  $t6, $t8, 2  # x * 4
-    add  $t3, $t5, $t6    # offset = y*64 + x*4
-    add  $t3, $s7, $t3    # $t3 = final address
-    sw   $t7, 0($t3)  # store color
+    sll  $t5, $t9, 6  
+    sll  $t6, $t8, 2  
+    add  $t3, $t5, $t6   
+    add  $t3, $s7, $t3   
+    sw   $t7, 0($t3) 
 
 skip_erase_block:
 	addi $t4, $t4, 1
     j erase_col
 
 next_erase_row:
-    addi $t2, $t2, 2  # Next row (2 bytes)
+    addi $t2, $t2, 2 
     addi $t0, $t0, 1
     j erase_row
     
@@ -705,11 +701,11 @@ next_wall_row:
     j    check_wall_row
 
 wall_collision:
-    li   $v1, 1     # set collision flag
+    li   $v1, 1
     jr   $ra
 
 trump_is_happy:
-    li   $v1, 0     # ensure no collision
+    li   $v1, 0  # ensure no collision
     jr   $ra
 
 # This function rotates a piece 90 degrees clockwise
