@@ -31,7 +31,7 @@
 # A: move left
 # D: move right
 # W: rotate right
-# S: rotate left
+# S: move piece down manually
 # space bar: drop piece
 # Q: quit game
 # R: restart (in the middle of the game)
@@ -798,12 +798,19 @@ rotate_piece_cw:
     or $t4, $t4, $t6
     or $t4, $t4, $t7
     sh $t4, 6($s2) # Store rotated row 3
-
     jr $ra     
 
-s_was_pressed: # moves the piece down by one row manually
-    # stuff that hasnt been implemented yet
-	j after_keyboard_handled # keep goin
+s_was_pressed:              # moves the piece down by one row manually
+    jal erase_pc_main       # erase current piece so it can be redrawn
+    jal get_grid_below      
+    jal check_downward_collision # see if its blocked underneath, stored in $v1
+    jal clear_grid_below    # clear out the buffer for next keypress :contentReference[oaicite:10]{index=10}
+    bnez $v1, s_skip_move   # if collision, do nothing
+    addi $a3, $a3, 1        # no collision then move piece down one row
+    
+s_skip_move:
+    jal draw_pc_main  
+    j after_keyboard_handled
 
 # Input:  $s0 points to current piece (4 half-words)
 # Output: $v0 = 1 if O piece, else 0
