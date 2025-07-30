@@ -22,7 +22,8 @@
 # 1. Add sound effects for game intro, game over, hard drop and clearing row
 # 2. Added game over screen, restart option, and play again option
 # 3. Gravity (TODO)
-# 4. Make sure that each tetromino type is a different colour (TODO/IP)
+# 4. Increase gravity over time
+# 4. Ensure each tetromino has a unique color
 # Hard Features: (2 hard)
 # 1. Implement full set of tetrominoes
 # 2. Wall kick feature
@@ -103,6 +104,10 @@ grid_left: .space 8 # containes the 4x4 grid one unit to the left
 grid_right: .space 8 # contains the 4x4 grid one unit to the right
 # used for collision checks and reset after
 
+# gravity stuff
+gravity_timer: .word 1900 # how long until gravity is applied
+lines_cleared: .word 0 # counts cleared lines, to increase gravity
+
 # game over bozo
 g_piece: .half 0x000F, 0x0008, 0x0008, 0x0009, 0x0009, 0x000F
 a_piece: .half 0x0006, 0x0009, 0x0009, 0x000F, 0x0009, 0x0009  
@@ -170,6 +175,7 @@ main:
     jal  play_starting_sound # start up music (def not cr intro)
     li   $a2, 6
     li   $a3, 0 # reset these for piece spawn
+    li $s5, 0 # gravity counter
     jal  random_bs_go
     jal  draw_pc_main
     j    game_loop
@@ -370,10 +376,8 @@ sleep: # cs students don't do this
     jal  nap_time    # zzzzzzzzzz *snores*
     addi $s5, $s5, 50
     blt  $s5, 1900, game_loop  # skip gravity if wait time under 1900ms  (100ms for gravity)
-    # user has not pressed anything for 2 seconds
-    #jal gravity # gravity the piece down
-    # continue the game loop
-    j    game_loop
+    # else apply gravity
+    j gravity # this will continue the game loop
 
 process_key:
     lw   $a0, 4($s6)  # load key code
@@ -507,7 +511,7 @@ d_was_pressed:
     addi $a2, $a2, 1
     jal  clear_grid_right # clear the grid
     jal  draw_pc_main # redraws the piece 1 unit left
-     addi $s5, $s5, 100 # add gravity delay
+    addi $s5, $s5, 100 # add gravity delay
     j    after_keyboard_handled # continue after key press
 
 you_cant_move_right:
@@ -923,6 +927,11 @@ cc_loop:
     jal nap_time
 	jal mario_lvlup
 	addi $s5, $s5, 200
+	# we've got one more cleared line
+    la    $t0, lines_cleared
+    lw    $t1, 0($t0)
+    addi  $t1, $t1, 1
+    sw    $t1, 0($t0)
     j   cc_loop  # repeat until no full rows or off the map
 
 cc_done:
@@ -1199,10 +1208,47 @@ cfr_done:
 
 # FINAL FUNCTIONS: MUST GO AT BOTTOM!
 after_keyboard_handled:
-	sw $zero, 0($s6) # reset the keyboard and go back to main loop
-	# check the gravity timer, and apply if needed
-	#blt $s5, 
-	# this ensures the user can get their commands in before gravity applies
+    sw    $zero, 0($s6)
+    li    $a0, 100
+    jal   nap_time
+    blt $s5, 1900, gravity
+    addi $s5, $s5, 100
+    j game_loop
+
+gravity:
+    li    $s5, 0
+    jal   erase_pc_main
+    jal   get_grid_below
+    jal   check_downward_collision
+    jal   clear_grid_below
+    bnez  $v1, amongus_sussy
+    addi  $a3, $a3, 1
+    jal   draw_pc_main
+    j game_loop # go back to game loop
+
+amongus_sussy:
+    # hd_collision but we return to game loop instead of inifinite looping
+    # when we check for collisions, we check if we can move the piece down one row
+    # if we can't, we need to lock the piece where it is currently
+    # subtracting 1 from y will make it go up a row, which is bad
+    jal draw_pc_main    # draw permanently at final position
+    li  $a0, 200 # wait before clearing rows
+    jal nap_time
+    # row clearing crap
+    jal mac_startup_sound # play this every time a piece hard drops
+    addi $s5, $s5, 800 # duration of waiting + sfx to gravity counter + 50ms delay
+    jal clear_completed_lines
+    # spawn the next piece
+    li $a0, 200
+    jal nap_time
+    # get a new random piece and reset x,y
+    jal check_top2rows_empty
+    bnez $v1, piece_died # end the game, we can't spawn
+    # otherwise we can spawn the piece
+    li $a2, 6
+    li $a3, 0
+    jal random_bs_go
+    jal draw_pc_main
     j game_loop
 
 nap_time:
