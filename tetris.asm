@@ -33,7 +33,9 @@
 # S: rotate left
 # space bar: drop piece
 # Q: quit game
-# R: restart
+# R: restart (in the middle of the game)
+# R: play again (available for 5 seconds after the game ends)
+#
 # Link to video demonstration for final submission:
 # - (insert YouTube / MyMedia / other URL here). Make sure we can view it!
 #
@@ -41,7 +43,7 @@
 # - no
 #
 # Any additional information that the TA needs to know:
-# - (write here, if any)
+# - What's your tetris high score?
 #
 #####################################################################
 # TODOS:
@@ -1039,8 +1041,7 @@ hd_collision:
     jal nap_time
     # row clearing logic
     jal mac_startup_sound # play this every time a piece hard drops
-    jal count_full_rows # count how many rows are filled
-    #bnez $v1, aplanehitthesecondtower #clear completed lines if we have them
+    jal clear_completed_lines
     # spawn the next piece
     li $a0, 320
     jal nap_time
@@ -1054,6 +1055,34 @@ hd_collision:
     jal random_bs_go
     jal draw_pc_main
     j after_keyboard_handled
+    
+# ----------------------------------------------------------------------------
+# clear_completed_lines
+#   Repeatedly finds and clears completed lines until none remain.
+#   Utilizes:
+#     count_full_rows        # returns y of first full row or –1 in $v1
+#     clear_line_and_shift   # clears and shifts at y = $v1
+#   Preserves $ra.
+# ----------------------------------------------------------------------------
+clear_completed_lines:
+    addi  $sp, $sp, -4
+    sw    $ra, 0($sp)
+
+cc_loop:
+    jal   count_full_rows    # $v1 ← y of a full row, or –1 if none
+    bltz  $v1, cc_done       # if $v1 < 0, no more full rows
+
+    # clear that row and shift above down by 1
+    jal   clear_line_and_shift
+    li $a0, 244 # sleep for a few ms to prevent sfx from clashing
+    jal nap_time
+	jal mario_lvlup
+    j     cc_loop           # repeat until no full rows
+
+cc_done:
+    lw    $ra, 0($sp)
+    addi  $sp, $sp, 4
+    jr    $ra
 
 # check_top_two_rows_empty
 # Sets v1=1 and returns if any pixel in y=0 or y=1 is not checkerboard;
@@ -1188,6 +1217,107 @@ clear_grid_below:
     sh   $zero, 4($t0)
     sh   $zero, 6($t0)
     jr $ra
+
+# clears row at y = value of $v1 and moves everything above it down a row
+# ----------------------------------------------------------------------------
+# clear_line_and_shift
+#   Clears the row y = $v1 (interior x=1…14) by redrawing it in checkerboard,
+#   then shifts every row above it (0…y–1) down by one, swapping any
+#   checkerboard pixels so the pattern stays consistent. Walls at x=0,15
+#   and rows above y are untouched.  Uses $s7 as the framebuffer base.
+#   Preserves $v1 and $ra.
+# ----------------------------------------------------------------------------
+clear_line_and_shift:
+    addi  $sp, $sp, -4         # save return address
+    sw    $ra, 0($sp)
+
+    move  $t9, $v1             # t9 = target row y
+
+    # 1) Clear row y = t9 to checkerboard pattern (x=1…14)
+    li    $t0, 1               # x = 1
+clear_row_loop:
+    bgt   $t0, 14, shift_rows
+    # compute parity = (y + x) & 1
+    add   $t1, $t9, $t0
+    andi  $t1, $t1, 1
+    beqz  $t1, clear_dark
+    li    $t3, 0x00333333      # light gray
+    j     clear_store
+clear_dark:
+    li    $t3, 0x00222222      # dark gray
+clear_store:
+    # addr = s7 + ((y*16 + x) * 4)
+    sll   $t2, $t9, 4          # t2 = y*16
+    add   $t2, $t2, $t0        # t2 = y*16 + x
+    sll   $t2, $t2, 2          # t2 = byte offset
+    add   $t2, $s7, $t2
+    sw    $t3, 0($t2)
+    addi  $t0, $t0, 1
+    j     clear_row_loop
+
+    # 2) Shift rows above y (from y–1 down to 0) down by one
+shift_rows:
+    addi  $t9, $t9, -1         # start at row above: y–1
+shift_outer:
+    bltz  $t9, fill_top_rows   # when t9<0, shift is done
+    li    $t0, 1               # x = 1
+shift_inner:
+    bgt   $t0, 14, dec_shift_row
+    # load src pixel at (t9, x)
+    sll   $t2, $t9, 4
+    add   $t2, $t2, $t0
+    sll   $t2, $t2, 2
+    add   $t2, $s7, $t2
+    lw    $t3, 0($t2)
+    # if checkerboard, swap colors
+    li    $t4, 0x00222222
+    beq   $t3, $t4, set_light
+    li    $t4, 0x00333333
+    beq   $t3, $t4, set_dark
+    j     write_pixel
+set_light:
+    li    $t3, 0x00333333
+    j     write_pixel
+set_dark:
+    li    $t3, 0x00222222
+write_pixel:
+    # write to (t9+1, x)
+    addi  $t5, $t9, 1
+    sll   $t6, $t5, 4
+    add   $t6, $t6, $t0
+    sll   $t6, $t6, 2
+    add   $t6, $s7, $t6
+    sw    $t3, 0($t6)
+    addi  $t0, $t0, 1
+    j     shift_inner
+dec_shift_row:
+    addi  $t9, $t9, -1
+    j     shift_outer
+
+    # 3) Repaint the topmost row (y=0 interior x=1…14) in checkerboard
+fill_top_rows:
+    li    $t0, 1              # x = 1
+fill_top_loop:
+    bgt   $t0, 14, done_shift
+    andi  $t1, $t0, 1         # parity = x & 1 (since y=0)
+    beqz  $t1, fill_dark
+    li    $t3, 0x00333333
+    j     fill_store
+fill_dark:
+    li    $t3, 0x00222222
+fill_store:
+    # addr = s7 + ((0*16 + x)*4) = s7 + (x*4)
+    sll   $t2, $t0, 2
+    add   $t2, $s7, $t2
+    sw    $t3, 0($t2)
+    addi  $t0, $t0, 1
+    j     fill_top_loop
+
+done_shift:
+    lw    $ra, 0($sp)         # restore return address
+    addi  $sp, $sp, 4
+    jr    $ra
+
 
 # finds the first full row 
 count_full_rows:
