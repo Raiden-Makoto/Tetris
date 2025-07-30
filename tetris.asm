@@ -366,12 +366,13 @@ game_loop:
     j    process_key   # key ready
 
 sleep: # cs students don't do this
-    li   $a0, 100
+    li   $a0, 50
     jal  nap_time    # zzzzzzzzzz *snores*
-    addi $s5, $s5, 100
-    blt  $s5, 2000, game_loop  # skip gravity if wait time under 1900ms 
-    #j gravity 	# gravity the piece down
-    # gravity will hand control back to game_loop
+    addi $s5, $s5, 50
+    blt  $s5, 1900, game_loop  # skip gravity if wait time under 1900ms  (100ms for gravity)
+    # user has not pressed anything for 2 seconds
+    #jal gravity # gravity the piece down
+    # continue the game loop
     j    game_loop
 
 process_key:
@@ -395,6 +396,7 @@ a_was_pressed:
     addi $a2, $a2, -1
     jal  clear_grid_left # clear the grid
     jal  draw_pc_main # redraws the piece 1 left
+    addi $s5, $s5, 100 # add gravity delay
     j    after_keyboard_handled # continue after key press
 
 you_cant_move_left:
@@ -505,6 +507,7 @@ d_was_pressed:
     addi $a2, $a2, 1
     jal  clear_grid_right # clear the grid
     jal  draw_pc_main # redraws the piece 1 unit left
+     addi $s5, $s5, 100 # add gravity delay
     j    after_keyboard_handled # continue after key press
 
 you_cant_move_right:
@@ -804,12 +807,14 @@ s_was_pressed:              # moves the piece down by one row manually
     jal erase_pc_main       # erase current piece so it can be redrawn
     jal get_grid_below      
     jal check_downward_collision # see if its blocked underneath, stored in $v1
-    jal clear_grid_below    # clear out the buffer for next keypress :contentReference[oaicite:10]{index=10}
-    bnez $v1, s_skip_move   # if collision, do nothing
+    jal clear_grid_below    # clear out the buffer for next keypress
+    bnez $v1, lock_and_spawn   # if collision, generate new piece
     addi $a3, $a3, 1        # no collision then move piece down one row
+    jal draw_pc_main
+    j after_keyboard_handled
     
-s_skip_move:
-    jal draw_pc_main  
+lock_and_spawn:
+    jal hd_collision  
     j after_keyboard_handled
 
 # Input:  $s0 points to current piece (4 half-words)
@@ -887,13 +892,14 @@ hd_collision:
     # if we can't, we need to lock the piece where it is currently
     # subtracting 1 from y will make it go up a row, which is bad
     jal draw_pc_main    # draw permanently at final position
-    li  $a0, 320 # wait before clearing rows
+    li  $a0, 200 # wait before clearing rows
     jal nap_time
     # row clearing crap
     jal mac_startup_sound # play this every time a piece hard drops
+    addi $s5, $s5, 800 # duration of waiting + sfx to gravity counter + 50ms delay
     jal clear_completed_lines
     # spawn the next piece
-    li $a0, 320
+    li $a0, 200
     jal nap_time
     # get a new random piece and reset x,y
     jal check_top2rows_empty
@@ -916,6 +922,7 @@ cc_loop:
     li $a0, 444 # sleep for a few ms to prevent sfx from clashing
     jal nap_time
 	jal mario_lvlup
+	addi $s5, $s5, 200
     j   cc_loop  # repeat until no full rows or off the map
 
 cc_done:
@@ -1193,6 +1200,9 @@ cfr_done:
 # FINAL FUNCTIONS: MUST GO AT BOTTOM!
 after_keyboard_handled:
 	sw $zero, 0($s6) # reset the keyboard and go back to main loop
+	# check the gravity timer, and apply if needed
+	#blt $s5, 
+	# this ensures the user can get their commands in before gravity applies
     j game_loop
 
 nap_time:
@@ -1500,7 +1510,7 @@ mario_lvlup:
 	li $v0, 33
 	li $a2, 0 # piano is W
 	li $a3, 100 # max volume
-	li $a1, 88 # rapid arpeggios
+	li $a1, 40 # rapid arpeggios
 	li $a0, G4
 	syscall
 	li $a0, B4
