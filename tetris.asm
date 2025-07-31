@@ -655,60 +655,6 @@ next_erase_row:
     
  get_eliminated_nub:
  	jr $ra
-	
-check_hitting_wall:
-    # s0 contains the index of the piece we want to wall test
-    # $a2 is the x coord (0 = left wall, 16 = right wall)
-    # $a3 is the y coord (31 = bottom wall)
-    # Returns: $v1 = 1 if collision, 0 otherwise
-    li   $v1, 0   # Assume no collision
-    move $t2, $s0     # $t2 points to piece base
-    li   $t0, 0   # row index
-
-check_wall_row:
-    beq  $t0, 4, trump_is_happy # no piece illegally crossed the wall
-    lhu  $t1, 0($t2)  # get 16-bit row data
-    li   $t4, 0   # column index
-
-check_wall_inner_loop:
-    beq $t4, 4, next_wall_row
-    # test bit: leftmost is bit 3
-    li   $t5, 3
-    sub  $t5, $t5, $t4    # $t5 = 3 - column
-    li   $t6, 1
-    sllv $t6, $t6, $t5    # create bitmask
-    and  $t7, $t1, $t6
-    beqz $t7, wall_skip_block   # skip if bit is 0
-    
-    # compute screen coordinates
-    add  $t8, $a2, $t4    # x = a2 + col
-    add  $t9, $a3, $t0    # y = a3 + row
-
-    # check x boundaries (0 or 16)
-    beqz $t8, wall_collision    # x = 0 (left wall)
-    li   $t3, 16
-    beq  $t8, $t3, wall_collision # x = 16 (right wall)
-    
-    # check y boundary (31)
-    li   $t3, 31
-    beq  $t9, $t3, wall_collision # y = 31 (bottom wall)
-    
-wall_skip_block:
-    addi $t4, $t4, 1  # next column
-    j    check_wall_inner_loop
-
-next_wall_row:
-    addi $t2, $t2, 2  # next 2-byte row
-    addi $t0, $t0, 1  # next row
-    j    check_wall_row
-
-wall_collision:
-    li   $v1, 1
-    jr   $ra
-
-trump_is_happy:
-    li   $v1, 0  # ensure no collision
-    jr   $ra
 
 # This function rotates a piece 90 degrees clockwise
 w_was_pressed:
@@ -816,7 +762,7 @@ try_right_kick: # will THIS work? I sure hope so!
 	
 try_up_kick:
 	addi $a3, $a3, -1
-	blt $a3, 0, try_down_kick # we can't move the piece off the map unfortunately
+	blt $a3, 0, ohnoessadge # we can't move the piece off the map unfortunately
 	jal canweputthishere # we'd better be able to >:(
 	bnez $v1, wesurecan
 	addi $a3, $a3, 1
@@ -826,7 +772,30 @@ ohnoessadge: # unable to roate
 	jal draw_pc_main
 	j after_keyboard_handled
 	
+canweputthishere:
+    #check if we can put the piece at $a2, $a3
+    li $v0, 1             # success
+    jr $ra
 
+apparentlynot:
+    li $v0, 0
+    jr $ra
+    
+wesurecan:
+	lhu $t0, 0($s2)
+	lhu $t1, 2($s2)
+	lhu $t2, 4($s2)
+	lhu $t3, 6($s2)
+	sh $t0, 0($s0)
+	sh $t1, 2($s0)
+	sh $t2, 4($s0)
+	sh $t3, 6($s0)
+	# clear the rotated_piece for next rotation
+	sh $zero, 0($s2)
+	sh $zero, 2($s2)
+	sh $zero, 4($s2)
+	sh $zero, 6($s2)
+	jal draw_pc_main # draw the rotated piece
 
 s_was_pressed:              # moves the piece down by one row manually
     jal erase_pc_main       # erase current piece so it can be redrawn
