@@ -668,8 +668,9 @@ w_was_pressed:
     jal rotate_piece_cw
     # remove the old piece from the board before moving new piece in
 	jal erase_pc_main 
-	#jal canweputthishere #check if we collide with anything
-	# beqz, v1, try_left_kick # wall kick starts here
+	jal canweputthishere #check if we collide with anything
+	bnez $v1, wesurecan # no wall kicks = best
+	beqz, $v1, try_left_kick # wall kick starts here
     # Copy rotated_piece to current_piece, assuming rotation is valid
 	lhu $t0, 0($s2)
 	lhu $t1, 2($s2)
@@ -773,15 +774,73 @@ ohnoessadge: # unable to roate
 	j after_keyboard_handled
 	
 canweputthishere:
-    #check if we can put the piece at $a2, $a3
-    li $v0, 1             # success
-    jr $ra
+    # check if we can put the piece at $a2, $a3
+    # returns $v0=1 if rotated_piece at ($a2,$a3) fits within bounds
+	# and does not overlap any non-checkerboard pixel; else $v0=0
+	addi $sp, $sp, -4
+    sw   $ra, 0($sp)
+    li   $t0, 0  # start from row 0 of the piece
+    
+wk_row_loop:
+    beq  $t0, 4, yippiewecan 
+    sll  $t2, $t0, 1      
+    addu $t2, $s2, $t2      
+    lhu  $t3, 0($t2)   
+    li   $t1, 0     
+    
+wk_col_loop:
+    beq  $t1, 4, wk_next_row
+    li   $t4, 3
+    sub  $t4, $t4, $t1  
+    li   $t5, 1
+    sllv $t5, $t5, $t4 
+    and  $t6, $t3, $t5
+    beqz $t6, skipts   # theres nothing here
+    addu $t7, $a2, $t1    
+    addu $t8, $a3, $t0    
+    # we can't illegally cross the wall
+    bltz $t7, boohoowecant
+    li   $t4, 15
+    beq  $t7, $t4, boohoowecant
+    li   $t4, 31
+    beq  $t8, $t4, boohoowecant
+    sll  $t8, $t8, 4        
+    addu $t8, $t8, $t7    
+    sll  $t8, $t8, 2     
+    addu $t8, $s7, $t8
+    lw   $t9, 0($t8)   
+    # if pixel isnt checkerboard (0x00222222 or 0x00333333) we're cooked
+    li   $t4, 0x00222222
+    beq  $t9, $t4, skipts
+    li   $t4, 0x00333333
+    beq  $t9, $t4, skipts
+    beqz $t9, skipts
+    j    boohoowecant
 
-apparentlynot:
-    li $v0, 0
-    jr $ra
+skipts:
+    addi $t1, $t1, 1
+    j    wk_col_loop
+
+wk_next_row:
+    addi $t0, $t0, 1
+    j    wk_row_loop
+
+yippiewecan:
+    li   $v1, 1
+    j    timetogoback
+
+boohoowecant:
+    li   $v1, 0
+    j timetogoback # return to main
+
+timetogoback:
+    # restore ra and return
+    lw   $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr   $ra
     
 wesurecan:
+	# copy s2 into s0
 	lhu $t0, 0($s2)
 	lhu $t1, 2($s2)
 	lhu $t2, 4($s2)
