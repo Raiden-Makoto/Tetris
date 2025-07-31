@@ -14,16 +14,17 @@
 # - Milestone 1: Drew the three walls and a checkboard grid, spawns initial tetromino
 # - Milestone 2: Movement (left, right, rotation and drop) added
 # - Milestone 3: All collision detection added, and row clearing added
-# - Milestone 4: 2 Easy, 1 Hard, need 1 more Easy
+# - Milestone 4: 3 Easy, 1 Hard 
+# - Milestone 5:
 #
 # Which approved features have been implemented?
 # WE ARE GOING TO DO 4 EASY 2 HARD
 # Easy Features: (4 easy)
 # 1. Add sound effects for game intro, game over, hard drop and clearing row
 # 2. Added game over screen, restart option, and play again option
-# 3. Gravity (TODO)
-# 4. Increase gravity over time
-# 4. Ensure each tetromino has a unique color
+# 3. Gravity
+# 4. Increase gravity over time (TODO)
+# 4. Ensure each tetromino has a unique color (TODO)
 # Hard Features: (2 hard)
 # 1. Implement full set of tetrominoes
 # 2. Wall kick feature
@@ -49,9 +50,9 @@
 #
 #####################################################################
 # TODOS:
-# 1: HF: map each piece to its corresponding color from original tetris
-# 2: EF: add gravity
-# 3: EF: increase gravity speed
+# EF: increase gravity speed
+# EF: Unique Tetromino-Color Mapping
+# HF: SRS Wall-kick implementation
 # 
 ##############################################################################
 
@@ -757,54 +758,50 @@ rotate_piece_cw:
     lhu $t2, 4($s0)   # Row 2
     lhu $t3, 6($s0)   # Row 3
     # Manually rotate the columns because I'm sick and tired of this bullshit
-    # Rotated Row 0 = Original Column 3 (bits from bottom to top)
-    andi $t4, $t0, 0x0008   # Row 0, bit 3 (value 8)
-    srl $t4, $t4, 3     # Move to bit 0
-    andi $t5, $t1, 0x0008   # Row 1, bit 3
-    srl $t5, $t5, 2     # Move to bit 1
-    andi $t6, $t2, 0x0008   # Row 2, bit 3  
-    srl $t6, $t6, 1     # Move to bit 2
-    andi $t7, $t3, 0x0008   # Row 3, bit 3
-    or $t4, $t4, $t5    # Combine bits
+    andi $t4, $t0, 0x0008  
+    srl $t4, $t4, 3     
+    andi $t5, $t1, 0x0008  
+    srl $t5, $t5, 2  
+    andi $t6, $t2, 0x0008  
+    srl $t6, $t6, 1    
+    andi $t7, $t3, 0x0008  
+    or $t4, $t4, $t5  
     or $t4, $t4, $t6
     or $t4, $t4, $t7
-    sh $t4, 0($s2)  # Store rotated row 0
-    # Rotated Row 1 = Original Column 2 (bits from bottom to top)
-    andi $t4, $t0, 0x0004  # Row 0, bit 2 (value 4)
-    srl $t4, $t4, 2     # Move to bit 0
-    andi $t5, $t1, 0x0004   # Row 1, bit 2
-    srl $t5, $t5, 1     # Move to bit 1
-    andi $t6, $t2, 0x0004   # Row 2, bit 2
-    andi $t7, $t3, 0x0004   # Row 3, bit 2
-    sll $t7, $t7, 1     # Move to bit 3
+    sh $t4, 0($s2) 
+    andi $t4, $t0, 0x0004 
+    srl $t4, $t4, 2    
+    andi $t5, $t1, 0x0004 
+    srl $t5, $t5, 1   
+    andi $t6, $t2, 0x0004  
+    andi $t7, $t3, 0x0004 
+    sll $t7, $t7, 1   
     or $t4, $t4, $t5
     or $t4, $t4, $t6
     or $t4, $t4, $t7
-    sh $t4, 2($s2)  # Store rotated row 1
-    # Rotated Row 2 = Original Column 1 (bits from bottom to top)
-    andi $t4, $t0, 0x0002  # Row 0, bit 1 (value 2)
-    srl $t4, $t4, 1     # Move to bit 0
-    andi $t5, $t1, 0x0002   # Row 1, bit 1
-    andi $t6, $t2, 0x0002   # Row 2, bit 1
-    sll $t6, $t6, 1     # Move to bit 2
-    andi $t7, $t3, 0x0002   # Row 3, bit 1
-    sll $t7, $t7, 2     # Move to bit 3
+    sh $t4, 2($s2)  # so tedious  aishdiualjkns.dqohudweku
+    andi $t4, $t0, 0x0002  
+    srl $t4, $t4, 1     
+    andi $t5, $t1, 0x0002  
+    andi $t6, $t2, 0x0002  
+    sll $t6, $t6, 1    
+    andi $t7, $t3, 0x0002  
+    sll $t7, $t7, 2  
     or $t4, $t4, $t5
     or $t4, $t4, $t6
     or $t4, $t4, $t7
-    sh $t4, 4($s2) # Store rotated row 2
-    # Rotated Row 3 = Original Column 0 (bits from bottom to top)
-    andi $t4, $t0, 0x0001  # Row 0, bit 0 (value 1)
-    andi $t5, $t1, 0x0001   # Row 1, bit 0
-    sll $t5, $t5, 1     # Move to bit 1
-    andi $t6, $t2, 0x0001   # Row 2, bit 0
-    sll $t6, $t6, 2     # Move to bit 2
-    andi $t7, $t3, 0x0001   # Row 3, bit 0
-    sll $t7, $t7, 3     # Move to bit 3
+    sh $t4, 4($s2) 
+    andi $t4, $t0, 0x0001 
+    andi $t5, $t1, 0x0001  
+    sll $t5, $t5, 1    
+    andi $t6, $t2, 0x0001  
+    sll $t6, $t6, 2    
+    andi $t7, $t3, 0x0001  
+    sll $t7, $t7, 3    
     or $t4, $t4, $t5
     or $t4, $t4, $t6
     or $t4, $t4, $t7
-    sh $t4, 6($s2) # Store rotated row 3
+    sh $t4, 6($s2)
     jr $ra     
 
 s_was_pressed:              # moves the piece down by one row manually
@@ -921,7 +918,7 @@ clear_completed_lines:
 
 cc_loop:
     jal   count_full_rows # $v1 contains y of a full row, or –1 if none
-    bltz  $v1, cc_done   # if $v1 < 0, no more full rows (off the map 
+    bltz  $v1, cc_done   # if $v1 < 0, no more full rows (off the map)
     jal   zap_line
     li $a0, 444 # sleep for a few ms to prevent sfx from clashing
     jal nap_time
@@ -977,22 +974,21 @@ top2rows_clear:
     jr   $ra
 
 check_downward_collision:
-	li $v1, 0
-	
-	lhu $t0, 0($s0) # piece row 0
-	lhu $t1, 2($s0)  # piece row 1
-	lhu $t2, 4($s0)    # piece row 2
-	lhu $t3, 6($s0)   # piece row
-	lhu $t4, 0($s3)    # grid_below row 0
-	lhu $t5, 2($s3)    # grid_below row 1
-	lhu $t6, 4($s3)    # grid_below row 2
-	lhu $t7, 6($s3)    # grid_below row 3
-	and $t8, $t0, $t4   # check row 0
-	and $t9, $t1, $t5  # check row 1
+	li $v1, 0 # assume no
+	lhu $t0, 0($s0)
+	lhu $t1, 2($s0)  
+	lhu $t2, 4($s0) 
+	lhu $t3, 6($s0) 
+	lhu $t4, 0($s3)   
+	lhu $t5, 2($s3)   
+	lhu $t6, 4($s3)   
+	lhu $t7, 6($s3)   
+	and $t8, $t0, $t4 
+	and $t9, $t1, $t5
 	or  $t8, $t8, $t9
-	and $t9, $t2, $t6   # check row 2
+	and $t9, $t2, $t6 
 	or  $t8, $t8, $t9
-	and $t9, $t3, $t7  # check row 3
+	and $t9, $t3, $t7 
 	or  $t8, $t8, $t9
 	beqz $t8, nothing_below
 	li $v1, 1    # big boom boom here
