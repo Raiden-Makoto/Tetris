@@ -22,9 +22,8 @@
 # Easy Features: (4 easy)
 # 1. Add sound effects for game intro, game over, hard drop and clearing row
 # 2. Added game over screen, restart option, and play again option
-# 3. Gravity
-# 4. Increase gravity over time (TODO)
-# 4. Ensure each tetromino has a unique color (TODO)
+# 3,4. Gravity and Increase gravity over time
+# 5. Ensure each tetromino has a unique color (TODO)
 # Hard Features: (2 hard)
 # 1. Implement full set of tetrominoes
 # 2. Wall kick feature
@@ -50,7 +49,6 @@
 #
 #####################################################################
 # TODOS:
-# EF: increase gravity speed
 # EF: Unique Tetromino-Color Mapping
 # HF: SRS Wall-kick implementation
 # 
@@ -105,10 +103,6 @@ grid_left: .space 8 # containes the 4x4 grid one unit to the left
 grid_right: .space 8 # contains the 4x4 grid one unit to the right
 # used for collision checks and reset after
 
-# gravity stuff
-gravity_timer: .word 1900 # how long until gravity is applied
-lines_cleared: .word 0 # counts cleared lines, to increase gravity
-
 # game over bozo
 g_piece: .half 0x000F, 0x0008, 0x0008, 0x0009, 0x0009, 0x000F
 a_piece: .half 0x0006, 0x0009, 0x0009, 0x000F, 0x0009, 0x0009  
@@ -147,7 +141,7 @@ r_piece: .half 0x000E, 0x0009, 0x000E, 0x000C, 0x000A, 0x0009
 # S7 is the DISPLAY
 # S6 is the keyboard
 # S5 is the gravity counter
-# S4 stores the grid to the left OR right
+# S4 stores the number of lines cleared, so we can increase gravity
 # S3 stores the grid below
 # S2 will store the rotated piece
 # S1 stores the piece color
@@ -176,7 +170,8 @@ main:
     jal  play_starting_sound # start up music (def not cr intro)
     li   $a2, 6
     li   $a3, 0 # reset these for piece spawn
-    li $s5, 0 # gravity counter
+    li   $s4, 0 # lines cleared counter
+    li   $s5, 0 # gravity counter
     jal  random_bs_go
     jal  draw_pc_main
     j    game_loop
@@ -897,7 +892,7 @@ hd_collision:
     jal nap_time
     # row clearing crap
     jal mac_startup_sound # play this every time a piece hard drops
-    addi $s5, $s5, 800 # duration of waiting + sfx to gravity counter + 50ms delay
+    addi $s5, $s5, 650 # duration of waiting + sfx to gravity counter + 50ms delay
     jal clear_completed_lines
     # spawn the next piece
     li $a0, 200
@@ -924,11 +919,10 @@ cc_loop:
     jal nap_time
 	jal mario_lvlup
 	addi $s5, $s5, 200
-	# we've got one more cleared line
-    la    $t0, lines_cleared
-    lw    $t1, 0($t0)
-    addi  $t1, $t1, 1
-    sw    $t1, 0($t0)
+	addi $s4, $s4, 1 # increase cleared rows by 1
+	srl $t0, $s4, 2 # rows_cleared // 4
+	mul $t0, $t0, 100
+	addu $s5, $s5, $t0 # add extra factor to speed up gravity
     j   cc_loop  # repeat until no full rows or off the map
 
 cc_done:
@@ -1232,7 +1226,7 @@ amongus_sussy:
     jal nap_time
     # row clearing crap
     jal mac_startup_sound # play this every time a piece hard drops
-    addi $s5, $s5, 800 # duration of waiting + sfx to gravity counter + 50ms delay
+    addi $s5, $s5, 650 # duration of waiting + sfx to gravity counter + 50ms delay
     jal clear_completed_lines
     # spawn the next piece
     li $a0, 200
