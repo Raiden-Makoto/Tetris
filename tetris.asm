@@ -1,21 +1,20 @@
 #####################################################################
 # CSCB58 Summer 2025 Assembly Final Project - UTSC
-# Name, Student Number, UTorID, official email
+# Max Cui, 1010852034, cuimax, mc.cui@mail.utoronto.ca
 # Bitmap Display Configuration:
-# - Unit width in pixels: 8 (update this as needed) 
-# - Unit height in pixels: 8 (update this as needed)
-# - Display width in pixels: 128 (update this as needed)
-# - Display height in pixels: 256 (update this as needed)
+# - Unit width in pixels: 8 
+# - Unit height in pixels: 8 
+# - Display width in pixels: 128 
+# - Display height in pixels: 256 
 # - Base Address for Display: 0x10008000 ($gp)
 #
 # Which milestones have been reached in this submission?
-# (See the assignment handout for descriptions of the milestones)
-# - Milestone current: 3
+# - Milestone current: 5 (Tetris DONE)
 # - Milestone 1: Drew the three walls and a checkboard grid, spawns initial tetromino
 # - Milestone 2: Movement (left, right, rotation and drop) added
 # - Milestone 3: All collision detection added, and row clearing added
 # - Milestone 4: 3 Easy, 1 Hard 
-# - Milestone 5:
+# - Milestone 5: 4 Easy, 2 Hard
 #
 # Which approved features have been implemented?
 # WE ARE GOING TO DO 4 EASY 2 HARD
@@ -41,28 +40,16 @@
 # - (insert YouTube / MyMedia / other URL here). Make sure we can view it!
 #
 # Are you OK with us sharing the video with people outside course staff?
-# - no
+# - no thanks
 #
 # Any additional information that the TA needs to know:
-# - What's your tetris high score?
+# - nothing
 #
-#####################################################################
-# TODOS:
-# EF: Unique Tetromino-Color Mapping
-# HF: SRS Wall-kick implementation
-# 
 ##############################################################################
 
 .data
 comma:   .asciiz ", "
 newline: .asciiz "\n"
-
-# debug for keyboard
-msg_game_starting:	.asciiz "Game Starting\n"
-msg_game_over: .asciiz "Ur kinda bad at ts game\n"
-msg_gravity: .asciiz "Moving piece down\n"
-msg_spawn_failed: .asciiz "Failed to spawn piece. Ending game\n"
-msg_rows_full: .asciiz "Full row found at y="
 
 ##############################################################################
 # Immutable Data
@@ -162,10 +149,6 @@ main:
     # draw background and walls
     jal  draw_checkerboard
     jal  build_a_wall
-    # “Game Starting” message
-    li   $v0, 4
-    la   $a0, msg_game_starting
-    syscall
     jal  play_starting_sound # start up music (def not cr intro)
     li   $a2, 6
     li   $a3, 0 # reset these for piece spawn
@@ -1242,15 +1225,6 @@ hogrider:
     j    scan_next_row
 
 cfr_done:
-	li $v0, 4
-	la $a0, msg_rows_full
-	syscall
-	li $v0, 1
-	move $a0, $v1
-	syscall
-	li $v0, 4
-	la $a0, newline
-	syscall
     jr   $ra
 
 # FINAL FUNCTIONS: MUST GO AT BOTTOM!
@@ -1304,10 +1278,6 @@ nap_time:
 	jr $ra
   
 done:
-	# draw the game over screen
-	li $v0, 4
-	la $a0, msg_game_over
-	syscall
 	# clear the annoying corner
 	li $t0, 0x00000000 # black pixel
 
@@ -1456,10 +1426,6 @@ gmovr_done_drawing:
     jr $ra
 
 game_over_yay:
-	# Print game over message
-    li $v0, 4
-    la $a0, msg_game_over
-    syscall
 	# Draw GAME OVER using block letters
     li $a2, 0   # initial x position
     li $a3, 8   # initial y position
