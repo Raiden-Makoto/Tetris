@@ -23,7 +23,6 @@
 # 1. Add sound effects for game intro, game over, hard drop and clearing row
 # 2. Added game over screen, restart option, and play again option
 # 3,4. Gravity and Increase gravity over time
-# 5. Ensure each tetromino has a unique color (TODO)
 # Hard Features: (2 hard)
 # 1. Implement full set of tetrominoes
 # 2. Wall kick feature
@@ -723,6 +722,8 @@ w_was_pressed:
     jal rotate_piece_cw
     # remove the old piece from the board before moving new piece in
 	jal erase_pc_main 
+	#jal canweputthishere #check if we collide with anything
+	# beqz, v1, try_left_kick # wall kick starts here
     # Copy rotated_piece to current_piece, assuming rotation is valid
 	lhu $t0, 0($s2)
 	lhu $t1, 2($s2)
@@ -798,6 +799,34 @@ rotate_piece_cw:
     or $t4, $t4, $t7
     sh $t4, 6($s2)
     jr $ra     
+
+try_left_kick:
+	addi $a2, $a2, -1  # move piece left
+    jal canweputthishere # see if we can put it here
+    bnez $v1, wesurecan # copy the rotate piece into the current piece
+    addi $a2, $a2, 1  # move it back if failed
+    j try_right_kick # see if we can kick right
+    
+try_right_kick: # will THIS work? I sure hope so!
+	addi $a2, $a2, 1 # move piece right
+	jal canweputthishere
+	bnez $v1, wesurecan
+	addi $a2, $a2, -1
+	j try_up_kick # ok surely we can move it up?
+	
+try_up_kick:
+	addi $a3, $a3, -1
+	blt $a3, 0, try_down_kick # we can't move the piece off the map unfortunately
+	jal canweputthishere # we'd better be able to >:(
+	bnez $v1, wesurecan
+	addi $a3, $a3, 1
+	j ohnoessadge
+	
+ohnoessadge: # unable to roate
+	jal draw_pc_main
+	j after_keyboard_handled
+	
+
 
 s_was_pressed:              # moves the piece down by one row manually
     jal erase_pc_main       # erase current piece so it can be redrawn
