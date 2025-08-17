@@ -37,7 +37,7 @@
 # R: play again (available for 5 seconds after the game ends)
 #
 # Link to video demonstration for final submission:
-# - (insert YouTube / MyMedia / other URL here). Make sure we can view it!
+# - https://youtu.be/5-dHZJa3Mw8
 #
 # Are you OK with us sharing the video with people outside course staff?
 # - no thanks
@@ -960,8 +960,7 @@ cc_loop:
 	jal mario_lvlup
 	addi $s5, $s5, 200
 	addi $s4, $s4, 1 # increase cleared rows by 1
-	srl $t0, $s4, 2 # rows_cleared // 4
-	mul $t0, $t0, 100
+	mul $t0, $s4, 100
 	addu $s5, $s5, $t0 # add extra factor to speed up gravity
     j   cc_loop  # repeat until no full rows or off the map
 
@@ -1504,9 +1503,6 @@ quit_game:
     syscall	    
  
 piece_died:
-	li $v0, 4
-	la $a0, msg_spawn_failed
-	syscall
 	li $a0, 144
 	jal nap_time
 	j done
